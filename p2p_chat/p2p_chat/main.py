@@ -102,6 +102,17 @@ class P2PChatApp:
                              connection_timeout: float = 15.0) -> None:
         """Configure automatic reconnection settings."""
         if self.peer:
+            # Get connection settings from settings manager
+            if hasattr(self, 'settings_manager'):
+                connection_settings = self.settings_manager.get_connection_settings()
+                max_attempts = connection_settings.get('max_reconnection_attempts', max_attempts)
+                initial_delay = connection_settings.get('initial_reconnection_delay', initial_delay)
+                max_delay = connection_settings.get('max_reconnection_delay', max_delay)
+                connection_timeout = connection_settings.get('connection_timeout', connection_timeout)
+                heartbeat_interval = connection_settings.get('heartbeat_interval', 1.0)
+            else:
+                heartbeat_interval = 1.0
+                
             self.peer.enable_reconnection(enabled)
             self.peer.set_reconnection_config(
                 max_attempts=max_attempts,
@@ -109,7 +120,9 @@ class P2PChatApp:
                 max_delay=max_delay,
                 connection_timeout=connection_timeout
             )
+            self.peer.set_heartbeat_config(interval=heartbeat_interval)
             logger.info(f"Reconnection configured: enabled={enabled}, max_attempts={max_attempts}")
+            logger.info(f"Heartbeat configured: interval={heartbeat_interval} seconds")
     
     def _wrap_async_callback(self, async_func):
         """Wrap an async function to be callable from GUI thread."""

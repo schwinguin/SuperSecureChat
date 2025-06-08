@@ -13,9 +13,10 @@ SuperSecureChat now includes robust automatic reconnection functionality that ha
 - **User feedback**: Clear status updates and messages during reconnection
 
 ### ✅ Connection Health Monitoring
-- **Heartbeat mechanism**: Regular ping/pong messages detect connection issues early
+- **Heartbeat mechanism**: Regular ping/pong messages detect connection issues early and prevent inactivity timeouts
 - **Proactive detection**: Identifies unstable connections before they fully fail
 - **Graceful handling**: Smooth transition between connected/disconnected states
+- **ICE consent maintenance**: Prevents WebRTC connections from expiring due to inactivity
 
 ### ✅ Network Issue Scenarios Handled
 - **WiFi disconnections**: Brief WiFi drops are automatically handled
@@ -84,7 +85,7 @@ peer.enable_reconnection(False)
 - **Initial delay**: 2 seconds  
 - **Max delay**: 30 seconds
 - **Connection timeout**: 15 seconds
-- **Heartbeat interval**: 5 seconds
+- **Heartbeat interval**: 1 second
 
 ### Customization Examples
 
@@ -128,6 +129,7 @@ This demonstrates:
 - ✅ **No re-setup needed**: No need to share new codes after disconnections
 - ✅ **Clear feedback**: Always know what's happening with the connection
 - ✅ **Works everywhere**: Handles various network scenarios automatically
+- ✅ **No inactivity timeouts**: Chats stay connected indefinitely during periods of silence
 
 ### For Developers
 - ✅ **Event-driven**: Clean event system for handling connection states

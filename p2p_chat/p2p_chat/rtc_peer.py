@@ -52,7 +52,7 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
         self.max_reconnection_delay: float = 30.0  # Max 30 seconds
         self.reconnection_task: Optional[asyncio.Task] = None
         self.connection_timeout: float = 15.0  # Timeout for connection establishment
-        self.heartbeat_interval: float = 5.0  # Send heartbeat every 5 seconds
+        self.heartbeat_interval: float = 1.0  # Send heartbeat every 1 second to prevent ICE consent timeout
         self.heartbeat_task: Optional[asyncio.Task] = None
         self.last_heartbeat_response: float = 0.0
         
@@ -550,7 +550,7 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
                         
                         # Check if we've received a response recently
                         current_time = asyncio.get_event_loop().time()
-                        if (current_time - self.last_heartbeat_response) > (self.heartbeat_interval * 3):
+                        if (current_time - self.last_heartbeat_response) > (self.heartbeat_interval * 10):
                             logger.warning("Heartbeat response timeout - connection may be unstable")
                             # Don't trigger reconnection here, let WebRTC state changes handle it
                             
@@ -585,4 +585,9 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
         self.connection_timeout = connection_timeout
         logger.info(f"Reconnection config: max_attempts={max_attempts}, "
                    f"initial_delay={initial_delay}, max_delay={max_delay}, "
-                   f"timeout={connection_timeout}") 
+                   f"timeout={connection_timeout}")
+    
+    def set_heartbeat_config(self, interval: float = 1.0) -> None:
+        """Configure heartbeat parameters to prevent inactivity disconnections."""
+        self.heartbeat_interval = max(0.5, min(60.0, interval))  # Clamp between 0.5 and 60 seconds
+        logger.info(f"Heartbeat interval set to {self.heartbeat_interval} seconds") 

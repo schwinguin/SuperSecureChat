@@ -3,3 +3,5 @@
 *.log
 /p2p_chat/p2p_chat/__pycache__
 /venv
+p2p_chat/INACTIVITY_FIX.md
+p2p_chat/test_heartbeat.py

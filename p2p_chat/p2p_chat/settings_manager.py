@@ -43,7 +43,8 @@ class SettingsManager:
                 "max_reconnection_attempts": 5,
                 "initial_reconnection_delay": 2.0,
                 "max_reconnection_delay": 30.0,
-                "connection_timeout": 15.0
+                "connection_timeout": 15.0,
+                "heartbeat_interval": 1.0
             }
         }
         
