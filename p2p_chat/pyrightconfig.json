@@ -1,0 +1,6 @@
+{
+  "include": ["p2p_chat"],
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": false,
+  "pythonVersion": "3.8"
+} 

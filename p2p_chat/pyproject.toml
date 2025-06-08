@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "p2p-chat"
+version = "1.0.0"
+description = "P2P end-to-end encrypted chat via WebRTC"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "P2P Chat Team", email = "dev@p2pchat.example"}
+]
+keywords = ["webrtc", "p2p", "chat", "encryption", "tkinter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Communications :: Chat",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+]
+dependencies = [
+    "aiortc>=1.6.0",
+    "pyee>=9.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/example/p2p-chat"
+Repository = "https://github.com/example/p2p-chat.git"
+Issues = "https://github.com/example/p2p-chat/issues"
+
+[project.scripts]
+p2p-chat = "p2p_chat.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["p2p_chat*"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "black>=22.0",
+    "flake8>=4.0",
+    "mypy>=0.950"
+] 

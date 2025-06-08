@@ -1,0 +1,4 @@
+aiortc>=1.13.0
+pyee>=9.0
+sounddevice>=0.4.6
+numpy>=1.21.0 

@@ -1,0 +1,5 @@
+
+/p2p_chat/__pycache__
+*.log
+/p2p_chat/p2p_chat/__pycache__
+/venv
