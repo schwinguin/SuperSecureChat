@@ -1,9 +1,9 @@
 {
   "audio": {
-    "input_device": null,
-    "input_device_name": "Default",
-    "output_device": null,
-    "output_device_name": "Default",
+    "input_device": 11,
+    "input_device_name": "default",
+    "output_device": 11,
+    "output_device_name": "default",
     "sample_rate": 48000,
     "channels": 1,
     "frames_per_buffer": 1024

@@ -35,7 +35,7 @@ class FileProgressDialog(ctk.CTkToplevel):
     def _setup_ui(self):
         """Set up the progress dialog UI."""
         # Main frame
-        main_frame = ctk.CTkFrame(self, corner_radius=15)
+        main_frame = ctk.CTkFrame(self, corner_radius=0)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Title
@@ -76,6 +76,7 @@ class FileProgressDialog(ctk.CTkToplevel):
             height=35,
             fg_color=("gray40", "gray40"),
             hover_color=("gray50", "gray30"),
+            corner_radius=8,
             command=self._on_cancel_click
         )
         self.cancel_btn.pack(pady=(15, 20))

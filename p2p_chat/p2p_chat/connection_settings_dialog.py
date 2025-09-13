@@ -84,7 +84,7 @@ class ConnectionSettingsDialog:
     def _setup_ui(self):
         """Set up the dialog UI."""
         # Main container
-        main_frame = ctk.CTkFrame(self.dialog, corner_radius=15)
+        main_frame = ctk.CTkFrame(self.dialog, corner_radius=0)
         main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.grid_columnconfigure(0, weight=1)
         main_frame.grid_rowconfigure(1, weight=1)  # Allow STUN frame to expand
@@ -98,7 +98,7 @@ class ConnectionSettingsDialog:
         title_label.grid(row=0, column=0, pady=(20, 30))
         
         # STUN Server section
-        stun_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        stun_frame = ctk.CTkFrame(main_frame, corner_radius=0)
         stun_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 15))
         stun_frame.grid_columnconfigure(1, weight=1)
         
@@ -189,7 +189,8 @@ class ConnectionSettingsDialog:
             stun_frame,
             text="🧪 Test Connection",
             command=self._test_stun_server,
-            width=150
+            width=150,
+            corner_radius=8
         )
         self.test_button.grid(row=7, column=0, columnspan=2, pady=(0, 20))
         
@@ -202,6 +203,7 @@ class ConnectionSettingsDialog:
             button_frame,
             text="❌ Cancel",
             command=self._cancel,
+            corner_radius=8,
             width=120,
             fg_color=("gray60", "gray40"),
             hover_color=("gray50", "gray30")
@@ -213,6 +215,7 @@ class ConnectionSettingsDialog:
             button_frame,
             text="💾 Save Settings",
             command=self._save_settings,
+            corner_radius=8,
             width=120
         )
         save_button.grid(row=0, column=1, padx=(10, 0))

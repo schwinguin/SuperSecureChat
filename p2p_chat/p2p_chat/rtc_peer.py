@@ -411,25 +411,42 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
     async def close(self) -> None:
         """Close the peer connection and clean up resources."""
         try:
-            # Disable reconnection
+            # Disable reconnection first
             self.reconnection_enabled = False
             
             # Stop reconnection and heartbeat tasks
             await self._stop_reconnection()
             await self._stop_heartbeat()
             
+            # Close data channel safely
             if self.channel:
-                self.channel.close()
-                self.channel = None
+                try:
+                    self.channel.close()
+                except Exception as e:
+                    logger.debug(f"Error closing data channel: {e}")
+                finally:
+                    self.channel = None
             
+            # Close peer connection safely
             if self.pc:
-                await self.pc.close()
-                self.pc = None
+                try:
+                    await self.pc.close()
+                except Exception as e:
+                    logger.debug(f"Error closing peer connection: {e}")
+                finally:
+                    self.pc = None
             
             logger.info("RTCPeer closed successfully")
             
         except Exception as e:
             logger.error(f"Error closing RTCPeer: {e}")
+            # Ensure cleanup even if there's an error
+            try:
+                self.channel = None
+                self.pc = None
+                self.reconnection_enabled = False
+            except:
+                pass
     
     @property
     def connection_state(self) -> str:

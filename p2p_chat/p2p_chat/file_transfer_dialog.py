@@ -47,7 +47,7 @@ class FileTransferDialog(ctk.CTkToplevel):
         logger.info("Setting up file transfer dialog UI...")
         
         # Main frame with better padding
-        main_frame = ctk.CTkFrame(self, corner_radius=15)
+        main_frame = ctk.CTkFrame(self, corner_radius=0)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Icon and title
@@ -59,7 +59,7 @@ class FileTransferDialog(ctk.CTkToplevel):
         title_label.pack(pady=(20, 10))
         
         # File info frame
-        info_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        info_frame = ctk.CTkFrame(main_frame, corner_radius=0)
         info_frame.pack(fill="x", padx=20, pady=10)
         
         # File details
@@ -98,6 +98,7 @@ class FileTransferDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=14, weight="bold"),
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20"),
+            corner_radius=8,
             command=self._on_accept_click
         )
         self.accept_btn.grid(row=0, column=0, padx=(0, 10), sticky="ew")
@@ -111,6 +112,7 @@ class FileTransferDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=14, weight="bold"),
             fg_color=("gray40", "gray40"),
             hover_color=("gray50", "gray30"),
+            corner_radius=8,
             command=self._on_reject_click
         )
         self.reject_btn.grid(row=0, column=1, padx=(10, 0), sticky="ew")

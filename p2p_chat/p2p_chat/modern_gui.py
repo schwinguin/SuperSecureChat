@@ -15,6 +15,7 @@ from .file_progress_dialog import FileProgressDialog
 from .modern_chat_window import ModernChatWindow
 from .chat_window import ChatWindow
 from .audio_settings_dialog import AudioSettingsDialog
+from .connection_wizard import ConnectionWizard
 
 # Make all classes available at module level for backward compatibility
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     'FileProgressDialog', 
     'ModernChatWindow',
     'ChatWindow',
-    'AudioSettingsDialog'
+    'AudioSettingsDialog',
+    'ConnectionWizard'
 ] 

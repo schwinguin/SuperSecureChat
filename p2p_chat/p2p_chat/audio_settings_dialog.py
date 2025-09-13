@@ -5,7 +5,12 @@ Allows users to configure input and output audio devices.
 
 import customtkinter as ctk
 from tkinter import messagebox
-import sounddevice as sd
+try:
+    import sounddevice as sd
+    SOUNDDEVICE_AVAILABLE = True
+except ImportError:
+    SOUNDDEVICE_AVAILABLE = False
+    sd = None
 import logging
 from typing import Optional, Dict, Any, Callable
 
@@ -79,6 +84,12 @@ class AudioSettingsDialog:
         
     def _load_audio_devices(self):
         """Load available audio devices."""
+        if not SOUNDDEVICE_AVAILABLE:
+            logger.warning("Sounddevice not available, using default devices")
+            self.input_devices = [{'index': 0, 'name': 'Default Input', 'hostapi': 0, 'max_input_channels': 1, 'max_output_channels': 0, 'default_samplerate': 44100}]
+            self.output_devices = [{'index': 0, 'name': 'Default Output', 'hostapi': 0, 'max_input_channels': 0, 'max_output_channels': 1, 'default_samplerate': 44100}]
+            return
+            
         try:
             devices = sd.query_devices()
             
@@ -112,7 +123,7 @@ class AudioSettingsDialog:
     def _setup_ui(self):
         """Set up the dialog UI."""
         # Main container
-        main_frame = ctk.CTkFrame(self.dialog, corner_radius=15)
+        main_frame = ctk.CTkFrame(self.dialog, corner_radius=0)
         main_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
         main_frame.grid_columnconfigure(0, weight=1)
         
@@ -125,7 +136,7 @@ class AudioSettingsDialog:
         title_label.grid(row=0, column=0, pady=(20, 30))
         
         # Input device section
-        input_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        input_frame = ctk.CTkFrame(main_frame, corner_radius=0)
         input_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 15))
         input_frame.grid_columnconfigure(1, weight=1)
         
@@ -165,12 +176,13 @@ class AudioSettingsDialog:
             text="🔊 Test",
             width=80,
             command=self._test_input_device,
+            corner_radius=8,
             state="normal" if input_device_names[0] != "No input devices found" else "disabled"
         )
         self.test_input_button.grid(row=0, column=2, padx=(0, 15), pady=15)
         
         # Output device section
-        output_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        output_frame = ctk.CTkFrame(main_frame, corner_radius=0)
         output_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 20))
         output_frame.grid_columnconfigure(1, weight=1)
         
@@ -210,12 +222,13 @@ class AudioSettingsDialog:
             text="🔊 Test",
             width=80,
             command=self._test_output_device,
+            corner_radius=8,
             state="normal" if output_device_names[0] != "No output devices found" else "disabled"
         )
         self.test_output_button.grid(row=0, column=2, padx=(0, 15), pady=15)
         
         # Audio quality settings
-        quality_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        quality_frame = ctk.CTkFrame(main_frame, corner_radius=0)
         quality_frame.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 20))
         quality_frame.grid_columnconfigure(1, weight=1)
         
@@ -246,7 +259,7 @@ class AudioSettingsDialog:
             self.sample_rate_dropdown.set(sample_rates[0])
             
         # Buttons
-        button_frame = ctk.CTkFrame(main_frame, corner_radius=8, fg_color="transparent")
+        button_frame = ctk.CTkFrame(main_frame, corner_radius=0, fg_color="transparent")
         button_frame.grid(row=4, column=0, sticky="ew", padx=20, pady=(0, 20))
         button_frame.grid_columnconfigure((0, 1), weight=1)
         
@@ -254,6 +267,7 @@ class AudioSettingsDialog:
             button_frame,
             text="Cancel",
             width=120,
+            corner_radius=8,
             height=40,
             command=self._cancel,
             fg_color=("gray60", "gray30"),
@@ -265,6 +279,7 @@ class AudioSettingsDialog:
             button_frame,
             text="Save Settings",
             width=120,
+            corner_radius=8,
             height=40,
             command=self._save_settings,
             font=ctk.CTkFont(weight="bold")
@@ -273,6 +288,10 @@ class AudioSettingsDialog:
         
     def _test_input_device(self):
         """Test the selected input device."""
+        if not SOUNDDEVICE_AVAILABLE:
+            messagebox.showwarning("Audio Testing", "Audio testing is not available because sounddevice is not installed.\n\nPlease install it with: pip install sounddevice")
+            return
+            
         try:
             selected_name = self.input_dropdown.get()
             device_index = next(dev['index'] for dev in self.input_devices if dev['name'] == selected_name)
@@ -301,6 +320,10 @@ class AudioSettingsDialog:
             
     def _test_output_device(self):
         """Test the selected output device."""
+        if not SOUNDDEVICE_AVAILABLE:
+            messagebox.showwarning("Audio Testing", "Audio testing is not available because sounddevice is not installed.\n\nPlease install it with: pip install sounddevice")
+            return
+            
         try:
             selected_name = self.output_dropdown.get()
             device_index = next(dev['index'] for dev in self.output_devices if dev['name'] == selected_name)

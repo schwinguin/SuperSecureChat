@@ -15,6 +15,7 @@ from .file_transfer_dialog import FileTransferDialog
 from .file_progress_dialog import FileProgressDialog
 from .audio_settings_dialog import AudioSettingsDialog
 from .connection_settings_dialog import ConnectionSettingsDialog
+from .connection_wizard import ConnectionWizard
 
 logger = logging.getLogger(__name__)
 
@@ -78,39 +79,67 @@ class ModernChatWindow:
         self.connected_users: Dict[str, Dict[str, Any]] = {}
         self.local_username = "You"
         
+        # Connection wizard
+        self.connection_wizard: Optional[ConnectionWizard] = None
+        
         self._setup_ui()
-        self._show_start_panel()
+        self._show_connection_wizard()
     
     def _setup_ui(self) -> None:
         """Set up the main UI structure with simplified design."""
         # Configure grid weights
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_rowconfigure(1, weight=0)  # Status bar row
         
         # Single main container - removed unnecessary main_frame wrapper
-        self.panel_frame = ctk.CTkFrame(self.root, corner_radius=15)
-        self.panel_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
+        self.panel_frame = ctk.CTkFrame(self.root, corner_radius=0)
+        self.panel_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 0))
         self.panel_frame.grid_columnconfigure(0, weight=1)
         self.panel_frame.grid_rowconfigure(1, weight=1)
         
-        # Simple title without extra frame wrapper
+        # Title and burger menu frame
+        title_frame = ctk.CTkFrame(self.panel_frame, fg_color="transparent")
+        title_frame.grid(row=0, column=0, sticky="ew", pady=(20, 10))
+        title_frame.grid_columnconfigure(0, weight=1)  # Center column
+        title_frame.grid_columnconfigure(1, weight=0)  # Fixed width for button
+        
+        # Simple title - centered
         title_label = ctk.CTkLabel(
-            self.panel_frame,
+            title_frame,
             text="🔒 P2P Secure Chat",
             font=ctk.CTkFont(size=28, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(20, 10))
+        title_label.grid(row=0, column=0, sticky="")
+        
+        # Burger menu button
+        self.burger_menu_button = ctk.CTkButton(
+            title_frame,
+            text="☰",
+            width=40,
+            height=40,
+            command=self._toggle_burger_menu,
+            font=ctk.CTkFont(size=18, weight="bold"),
+            corner_radius=8,
+            fg_color=("gray70", "gray30"),
+            hover_color=("gray60", "gray40")
+        )
+        self.burger_menu_button.grid(row=0, column=1, sticky="e", padx=(10, 20))
+        
+        # Burger menu dropdown (initially hidden) - use toplevel window
+        self.burger_menu_window = None
+        self.burger_menu_visible = False
         
         # Content area - removed panel_frame wrapper
-        self.content_frame = ctk.CTkFrame(self.panel_frame, corner_radius=10, fg_color="transparent")
-        self.content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 10))
+        self.content_frame = ctk.CTkFrame(self.panel_frame, corner_radius=0, fg_color="transparent")
+        self.content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
         self.content_frame.grid_columnconfigure(0, weight=1)
         self.content_frame.grid_rowconfigure(0, weight=1)
         
-        # Simplified status bar
-        status_frame = ctk.CTkFrame(self.panel_frame, height=40, corner_radius=8)
-        status_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 20))
+        # Status bar at the very bottom of the window
+        status_frame = ctk.CTkFrame(self.root, height=40, corner_radius=0, fg_color=("gray20", "gray20"))
+        status_frame.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 20))
         status_frame.grid_columnconfigure(0, weight=1)
         
         self.status_label = ctk.CTkLabel(
@@ -120,39 +149,153 @@ class ModernChatWindow:
             text_color=("gray50", "gray50")
         )
         self.status_label.grid(row=0, column=0, pady=8)
+    
+    def _toggle_burger_menu(self):
+        """Toggle the burger menu dropdown."""
+        if self.burger_menu_visible:
+            self._hide_burger_menu()
+        else:
+            self._show_burger_menu()
+    
+    def _show_burger_menu(self):
+        """Show the burger menu dropdown."""
+        if not self.burger_menu_visible:
+            # Create frame for menu within the main window
+            self.burger_menu_frame = ctk.CTkFrame(
+                self.root,
+                width=220,
+                height=140,
+                fg_color=("gray95", "gray15"),
+                corner_radius=0
+            )
+            
+            # Position the menu frame
+            self._position_burger_menu()
+            
+            # Create menu items
+            self._create_burger_menu_items()
+            
+            self.burger_menu_visible = True
+            # Bind click outside to close menu
+            self.root.after(100, lambda: self.root.bind("<Button-1>", self._on_click_outside_menu))
+    
+    def _hide_burger_menu(self):
+        """Hide the burger menu dropdown."""
+        if self.burger_menu_visible and self.burger_menu_frame:
+            self.burger_menu_frame.destroy()
+            self.burger_menu_frame = None
+            self.burger_menu_visible = False
+            # Unbind click outside
+            self.root.unbind("<Button-1>")
+    
+    def _position_burger_menu(self):
+        """Position the burger menu in the top right corner."""
+        try:
+            # Get the burger button position relative to the main window
+            button_x = self.burger_menu_button.winfo_x()
+            button_y = self.burger_menu_button.winfo_y()
+            button_height = self.burger_menu_button.winfo_height()
+            
+            # Calculate menu position (below the button, aligned to the right)
+            menu_x = button_x - 180  # 220px width - 40px button width = 180px offset
+            menu_y = button_y + button_height + 5  # 5px gap below button
+            
+            # Position the frame using place()
+            self.burger_menu_frame.place(x=menu_x, y=menu_y)
+            
+            print(f"Menu positioned at: x={menu_x}, y={menu_y}")
+        except Exception as e:
+            print(f"Error positioning burger menu: {e}")
+    
+    def _create_burger_menu_items(self):
+        """Create the burger menu items."""
+        # Configure the frame
+        self.burger_menu_frame.grid_columnconfigure(0, weight=1)
         
         # Connection settings button
-        self.connection_settings_button = ctk.CTkButton(
-            status_frame,
-            text="🌐",
-            width=40,
-            height=30,
-            command=self._show_connection_settings,
-            font=ctk.CTkFont(size=16)
+        connection_btn = ctk.CTkButton(
+            self.burger_menu_frame,
+            text="🌐 Connection Settings",
+            width=200,
+            height=35,
+            command=self._on_burger_connection_settings,
+            corner_radius=8,
+            font=ctk.CTkFont(size=14),
+            fg_color=("gray80", "gray25"),
+            hover_color=("gray70", "gray35")
         )
-        self.connection_settings_button.grid(row=0, column=1, padx=(0, 5), pady=5, sticky="e")
+        connection_btn.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
         
         # Audio settings button
-        self.audio_settings_button = ctk.CTkButton(
-            status_frame,
-            text="🎵",
-            width=40,
-            height=30,
-            command=self._show_audio_settings,
-            font=ctk.CTkFont(size=16)
+        audio_btn = ctk.CTkButton(
+            self.burger_menu_frame,
+            text="🎵 Audio Settings",
+            width=200,
+            height=35,
+            command=self._on_burger_audio_settings,
+            corner_radius=8,
+            font=ctk.CTkFont(size=14),
+            fg_color=("gray80", "gray25"),
+            hover_color=("gray70", "gray35")
         )
-        self.audio_settings_button.grid(row=0, column=2, padx=(0, 5), pady=5, sticky="e")
+        audio_btn.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
         
         # Theme toggle button
-        self.theme_button = ctk.CTkButton(
-            status_frame,
-            text="🌙",
-            width=40,
-            height=30,
-            command=self._toggle_theme,
-            font=ctk.CTkFont(size=16)
+        theme_btn = ctk.CTkButton(
+            self.burger_menu_frame,
+            text="🌙 Toggle Theme",
+            width=200,
+            height=35,
+            command=self._on_burger_theme_toggle,
+            corner_radius=8,
+            font=ctk.CTkFont(size=14),
+            fg_color=("gray80", "gray25"),
+            hover_color=("gray70", "gray35")
         )
-        self.theme_button.grid(row=0, column=3, padx=(0, 10), pady=5, sticky="e")
+        theme_btn.grid(row=2, column=0, padx=10, pady=(5, 10), sticky="ew")
+    
+    def _on_click_outside_menu(self, event):
+        """Handle clicks outside the burger menu to close it."""
+        try:
+            if self.burger_menu_frame and self.burger_menu_frame.winfo_exists():
+                # Get the menu frame geometry
+                menu_x = self.burger_menu_frame.winfo_rootx()
+                menu_y = self.burger_menu_frame.winfo_rooty()
+                menu_width = self.burger_menu_frame.winfo_width()
+                menu_height = self.burger_menu_frame.winfo_height()
+                
+                # Get the button geometry
+                button_x = self.burger_menu_button.winfo_rootx()
+                button_y = self.burger_menu_button.winfo_rooty()
+                button_width = self.burger_menu_button.winfo_width()
+                button_height = self.burger_menu_button.winfo_height()
+                
+                # Check if click is outside both the menu and button
+                outside_menu = not (menu_x <= event.x_root <= menu_x + menu_width and 
+                                  menu_y <= event.y_root <= menu_y + menu_height)
+                outside_button = not (button_x <= event.x_root <= button_x + button_width and 
+                                    button_y <= event.y_root <= button_y + button_height)
+                
+                if outside_menu and outside_button:
+                    self._hide_burger_menu()
+        except:
+            # If there's an error checking coordinates, just hide the menu
+            self._hide_burger_menu()
+    
+    def _on_burger_connection_settings(self):
+        """Handle connection settings from burger menu."""
+        self._hide_burger_menu()
+        self._show_connection_settings()
+    
+    def _on_burger_audio_settings(self):
+        """Handle audio settings from burger menu."""
+        self._hide_burger_menu()
+        self._show_audio_settings()
+    
+    def _on_burger_theme_toggle(self):
+        """Handle theme toggle from burger menu."""
+        self._hide_burger_menu()
+        self._toggle_theme()
     
     def _toggle_theme(self):
         """Toggle between dark and light themes."""
@@ -160,8 +303,13 @@ class ModernChatWindow:
         new_mode = "light" if current == "Dark" else "dark"
         ctk.set_appearance_mode(new_mode)
         
-        # Update theme button emoji
-        self.theme_button.configure(text="☀️" if new_mode == "dark" else "🌙")
+        # Update theme button emoji in burger menu if visible
+        if self.burger_menu_visible:
+            # Find and update the theme button in the burger menu
+            for widget in self.burger_menu_frame.winfo_children():
+                if isinstance(widget, ctk.CTkButton) and "Toggle Theme" in widget.cget("text"):
+                    widget.configure(text="☀️ Toggle Theme" if new_mode == "dark" else "🌙 Toggle Theme")
+                    break
     
     def _show_connection_settings(self):
         """Show the connection settings dialog."""
@@ -226,7 +374,7 @@ class ModernChatWindow:
         self._clear_panel()
         
         # Single content panel without extra wrappers
-        panel = ctk.CTkFrame(self.content_frame, corner_radius=10)
+        panel = ctk.CTkFrame(self.content_frame, corner_radius=0)
         panel.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         panel.grid_columnconfigure(0, weight=1)
         
@@ -299,7 +447,7 @@ class ModernChatWindow:
         self._clear_panel()
         
         # Single scrollable panel
-        panel = ctk.CTkScrollableFrame(self.content_frame, corner_radius=10)
+        panel = ctk.CTkScrollableFrame(self.content_frame, corner_radius=0)
         panel.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         panel.grid_columnconfigure(0, weight=1)
         
@@ -360,7 +508,7 @@ class ModernChatWindow:
             panel,
             height=100,
             font=ctk.CTkFont(size=12, family="monospace"),
-            corner_radius=8
+            corner_radius=0
         )
         self.return_entry.grid(row=6, column=0, sticky="ew", padx=20, pady=(0, 10))
         
@@ -384,12 +532,12 @@ class ModernChatWindow:
         # Back button
         ctk.CTkButton(
             panel,
-            text="← Back to Start",
+            text="← Back to Wizard",
             width=150,
             height=35,
             font=ctk.CTkFont(size=14),
             corner_radius=8,
-            command=self._show_start_panel,
+            command=self._show_connection_wizard,
             fg_color=("gray60", "gray40"),
             hover_color=("gray50", "gray50")
         ).grid(row=8, column=0, pady=(0, 20))
@@ -403,7 +551,7 @@ class ModernChatWindow:
         self._clear_panel()
         
         # Single panel without wrapper frames
-        panel = ctk.CTkFrame(self.content_frame, corner_radius=10)
+        panel = ctk.CTkFrame(self.content_frame, corner_radius=0)
         panel.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         panel.grid_columnconfigure(0, weight=1)
         
@@ -434,7 +582,7 @@ class ModernChatWindow:
             panel,
             height=120,
             font=ctk.CTkFont(size=12, family="monospace"),
-            corner_radius=8
+            corner_radius=0
         )
         self.join_entry.grid(row=3, column=0, sticky="ew", padx=30, pady=(0, 10))
         
@@ -448,7 +596,7 @@ class ModernChatWindow:
             width=160,  # Fixed width to prevent shifting
             height=45,
             font=ctk.CTkFont(size=16, weight="bold"),
-            corner_radius=10,
+            corner_radius=8,
             command=self._on_join_with_key,
             fg_color=("gray50", "gray30"),  # Background shade instead of gold
             hover_color=("gray60", "gray20")
@@ -456,7 +604,7 @@ class ModernChatWindow:
         self.join_submit_btn.grid(row=4, column=0, pady=(0, 30))
         
         # Return key display section (initially hidden)
-        self.return_display_frame = ctk.CTkFrame(panel, corner_radius=8)
+        self.return_display_frame = ctk.CTkFrame(panel, corner_radius=0)
         self.return_display_frame.grid_columnconfigure(0, weight=1)
         
         ctk.CTkLabel(
@@ -491,12 +639,12 @@ class ModernChatWindow:
         # Back button
         ctk.CTkButton(
             panel,
-            text="← Back to Start",
+            text="← Back to Wizard",
             width=150,
             height=35,
             font=ctk.CTkFont(size=14),
             corner_radius=8,
-            command=self._show_start_panel,
+            command=self._show_connection_wizard,
             fg_color=("gray60", "gray40"),
             hover_color=("gray50", "gray50")
         ).grid(row=6, column=0, pady=30)
@@ -504,19 +652,83 @@ class ModernChatWindow:
         self.current_panel = panel
         print("✅ Join panel setup complete")
     
+    def _show_connection_wizard(self) -> None:
+        """Show the connection wizard instead of the start panel."""
+        self._clear_panel()
+        
+        # Create a dedicated wizard frame that won't interfere with content_frame
+        self.wizard_container = ctk.CTkFrame(self.panel_frame, corner_radius=0, fg_color="transparent")
+        self.wizard_container.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
+        self.wizard_container.grid_columnconfigure(0, weight=1)
+        self.wizard_container.grid_rowconfigure(0, weight=1)
+        
+        # Create and show the connection wizard
+        self.connection_wizard = ConnectionWizard(self.wizard_container)
+        
+        # Set up wizard callbacks
+        self.connection_wizard.on_create_chat = self._on_wizard_create_chat
+        self.connection_wizard.on_join_chat = self._on_wizard_join_chat
+        self.connection_wizard.on_connect_chat = self._on_wizard_connect_chat
+        self.connection_wizard.on_wizard_complete = self._on_wizard_complete
+        self.connection_wizard.on_wizard_cancel = self._on_wizard_cancel
+        
+        self.connection_wizard.show()
+        
+        # Set current panel to track wizard state
+        self.current_panel = self.panel_frame
+    
+    def _on_wizard_create_chat(self) -> None:
+        """Handle create chat from wizard."""
+        if self.on_create_chat:
+            self.on_create_chat()
+    
+    def _on_wizard_join_chat(self, invite_key: str) -> None:
+        """Handle join chat from wizard."""
+        if self.on_join_chat:
+            self.on_join_chat(invite_key)
+    
+    def _on_wizard_connect_chat(self, return_key: str) -> None:
+        """Handle connect chat from wizard."""
+        if self.on_connect_chat:
+            self.on_connect_chat(return_key)
+    
+    def _on_wizard_complete(self) -> None:
+        """Handle wizard completion - transition to chat."""
+        # Clean up wizard container
+        if hasattr(self, 'wizard_container') and self.wizard_container:
+            self.wizard_container.destroy()
+            self.wizard_container = None
+        
+        # Ensure content frame is properly recreated after wizard cleanup
+        self._recreate_content_frame()
+        self._show_chat_panel()
+    
+    def _on_wizard_cancel(self) -> None:
+        """Handle wizard cancellation - show start panel as fallback."""
+        # Clean up wizard container
+        if hasattr(self, 'wizard_container') and self.wizard_container:
+            self.wizard_container.destroy()
+            self.wizard_container = None
+        
+        self._show_start_panel()
+    
     def _show_chat_panel(self) -> None:
         """Show the enhanced chat interface with file transfer, voice chat, and user list capabilities."""
         self._clear_panel()
         
+        # Ensure content frame exists and is valid
+        if not hasattr(self, 'content_frame') or not self.content_frame or not self.content_frame.winfo_exists():
+            self._recreate_content_frame()
+        
         # Main panel for chat with two columns: chat area and user list
-        panel = ctk.CTkFrame(self.content_frame, corner_radius=10)
+        panel = ctk.CTkFrame(self.content_frame, corner_radius=0)
         panel.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         panel.grid_columnconfigure(0, weight=1)  # Chat area takes most space
         panel.grid_columnconfigure(1, weight=0)  # User list has fixed width
         panel.grid_rowconfigure(0, weight=1)
         
         # Chat area frame
-        chat_frame = ctk.CTkFrame(panel, corner_radius=8, fg_color="transparent")
+        chat_frame = ctk.CTkFrame(panel, corner_radius=0, fg_color="transparent")
         chat_frame.grid(row=0, column=0, sticky="nsew", padx=(15, 5), pady=15)
         chat_frame.grid_columnconfigure(0, weight=1)
         chat_frame.grid_rowconfigure(0, weight=1)  # Chat display gets most space
@@ -533,7 +745,7 @@ class ModernChatWindow:
         self.chat_display.grid(row=0, column=0, sticky="nsew")
         
         # User list sidebar
-        user_list_frame = ctk.CTkFrame(panel, corner_radius=8, width=200)
+        user_list_frame = ctk.CTkFrame(panel, corner_radius=0, width=200)
         user_list_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 15), pady=15)
         user_list_frame.grid_columnconfigure(0, weight=1)
         user_list_frame.grid_rowconfigure(1, weight=1)
@@ -551,7 +763,7 @@ class ModernChatWindow:
         # User list display
         self.user_list_display = ctk.CTkTextbox(
             user_list_frame,
-            corner_radius=6,
+            corner_radius=8,
             font=ctk.CTkFont(size=12),
             state="disabled",
             height=100,
@@ -580,7 +792,7 @@ class ModernChatWindow:
             placeholder_text="Type your message here... (Press Enter to send)",
             font=ctk.CTkFont(size=14),
             height=35,  # Reduced from 45
-            corner_radius=8
+            corner_radius=0
         )
         self.message_entry.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.message_entry.bind("<Return>", self._on_send)
@@ -601,7 +813,7 @@ class ModernChatWindow:
             width=80,
             height=32,
             font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=6,
+            corner_radius=8,
             command=self._on_send,
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20")
@@ -615,7 +827,7 @@ class ModernChatWindow:
             width=70,
             height=32,
             font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=6,
+            corner_radius=8,
             command=self._on_send_file,
             fg_color=("gray45", "gray35"),
             hover_color=("gray55", "gray25")
@@ -629,7 +841,7 @@ class ModernChatWindow:
             width=140,  # Fixed width to accommodate both text states
             height=32,
             font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=6,
+            corner_radius=8,
             command=self._on_voice_enable_toggle,
             fg_color=("gray60", "gray40"),
             hover_color=("gray50", "gray50")
@@ -645,7 +857,7 @@ class ModernChatWindow:
             width=70,
             height=32,
             font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=6,
+            corner_radius=8,
             command=self._on_disconnect,
             fg_color=("gray40", "gray40"),
             hover_color=("gray50", "gray30")
@@ -711,6 +923,73 @@ class ModernChatWindow:
         if self.current_panel:
             self.current_panel.destroy()
             self.current_panel = None
+    
+    def _recreate_content_frame(self) -> None:
+        """Recreate the content frame after wizard cleanup."""
+        # Destroy existing content frame if it exists
+        if hasattr(self, 'content_frame') and self.content_frame:
+            try:
+                self.content_frame.destroy()
+            except:
+                pass  # Frame may already be destroyed
+        
+        # Ensure panel_frame exists and is valid
+        if not hasattr(self, 'panel_frame') or not self.panel_frame or not self.panel_frame.winfo_exists():
+            self._recreate_panel_frame()
+        
+        # Recreate content frame
+        self.content_frame = ctk.CTkFrame(self.panel_frame, corner_radius=0, fg_color="transparent")
+        self.content_frame.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        self.content_frame.grid_rowconfigure(0, weight=1)
+    
+    def _recreate_panel_frame(self) -> None:
+        """Recreate the panel frame if it has been destroyed."""
+        # Destroy existing panel frame if it exists
+        if hasattr(self, 'panel_frame') and self.panel_frame:
+            try:
+                self.panel_frame.destroy()
+            except:
+                pass  # Frame may already be destroyed
+        
+        # Recreate panel frame
+        self.panel_frame = ctk.CTkFrame(self.root, corner_radius=0)
+        self.panel_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 0))
+        self.panel_frame.grid_columnconfigure(0, weight=1)
+        self.panel_frame.grid_rowconfigure(1, weight=1)
+        
+        # Recreate title and burger menu frame
+        title_frame = ctk.CTkFrame(self.panel_frame, fg_color="transparent")
+        title_frame.grid(row=0, column=0, sticky="ew", pady=(20, 10))
+        title_frame.grid_columnconfigure(0, weight=1)  # Center column
+        title_frame.grid_columnconfigure(1, weight=0)  # Fixed width for button
+        
+        # Recreate title - centered
+        title_label = ctk.CTkLabel(
+            title_frame,
+            text="🔒 P2P Secure Chat",
+            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color=("gray10", "gray90")
+        )
+        title_label.grid(row=0, column=0, sticky="")
+        
+        # Recreate burger menu button
+        self.burger_menu_button = ctk.CTkButton(
+            title_frame,
+            text="☰",
+            width=40,
+            height=40,
+            command=self._toggle_burger_menu,
+            font=ctk.CTkFont(size=18, weight="bold"),
+            corner_radius=8,
+            fg_color=("gray70", "gray30"),
+            hover_color=("gray60", "gray40")
+        )
+        self.burger_menu_button.grid(row=0, column=1, sticky="e", padx=(10, 20))
+        
+        # Recreate burger menu dropdown (initially hidden) - use frame
+        self.burger_menu_frame = None
+        self.burger_menu_visible = False
     
     def _on_create_chat(self) -> None:
         """Handle create chat button click."""
@@ -789,10 +1068,14 @@ class ModernChatWindow:
     def show_create_panel(self, invite_key: str) -> None:
         """Show create panel with the generated invite key."""
         self.invite_key = invite_key
-        self._show_create_panel()
         
-        # Fix: Use root.after to ensure the panel is fully created first, with a longer delay
-        self.root.after(200, lambda: self._populate_invite_key(invite_key))
+        # If wizard is active, update it
+        if self.connection_wizard:
+            self.connection_wizard.set_invite_key(invite_key)
+        else:
+            # Fallback to old method
+            self._show_create_panel()
+            self.root.after(200, lambda: self._populate_invite_key(invite_key))
     
     def _populate_invite_key(self, invite_key: str) -> None:
         """Helper method to populate the invite key field."""
@@ -832,45 +1115,58 @@ class ModernChatWindow:
         self.return_key = return_key
         print(f"🔧 Showing return key in panel: {return_key[:50]}...")
         
-        # Show the return key display frame in the join panel
-        if hasattr(self, 'return_display_frame'):
-            # Make the return key section visible
-            self.return_display_frame.grid(row=2, column=0, sticky="ew", padx=30, pady=10)
-            
-            # Populate the return key text
-            if hasattr(self, 'return_display_text'):
-                try:
-                    self.return_display_text.configure(state="normal")
-                    self.return_display_text.delete("0.0", "end")
-                    self.return_display_text.insert("0.0", return_key)
-                    self.return_display_text.configure(state="disabled")
-                    print("✅ Return key displayed in panel")
-                    
-                    # Also copy to clipboard automatically
-                    self.root.clipboard_clear()
-                    self.root.clipboard_append(return_key)
-                    
-                    # Update status
-                    self.set_status("Return key generated - share it with the chat creator! 📤", "green")
-                    
-                except Exception as e:
-                    print(f"❌ Error displaying return key: {e}")
-            else:
-                print("❌ return_display_text not found!")
-        else:
-            print("❌ return_display_frame not found!")
-            # Fallback to the old popup method if something went wrong
-            messagebox.showinfo(
-                "Return Key Generated", 
-                f"Share this return key with the chat creator:\n\n{return_key}\n\n"
-                "This has been copied to your clipboard."
-            )
+        # If wizard is active, update it
+        if self.connection_wizard:
+            self.connection_wizard.set_return_key(return_key)
+            # Also copy to clipboard automatically
             self.root.clipboard_clear()
             self.root.clipboard_append(return_key)
+            # Update status
+            self.set_status("Return key generated - share it with the chat creator! 📤", "green")
+        else:
+            # Fallback to old method
+            if hasattr(self, 'return_display_frame'):
+                # Make the return key section visible
+                self.return_display_frame.grid(row=2, column=0, sticky="ew", padx=30, pady=10)
+                
+                # Populate the return key text
+                if hasattr(self, 'return_display_text'):
+                    try:
+                        self.return_display_text.configure(state="normal")
+                        self.return_display_text.delete("0.0", "end")
+                        self.return_display_text.insert("0.0", return_key)
+                        self.return_display_text.configure(state="disabled")
+                        print("✅ Return key displayed in panel")
+                        
+                        # Also copy to clipboard automatically
+                        self.root.clipboard_clear()
+                        self.root.clipboard_append(return_key)
+                        
+                        # Update status
+                        self.set_status("Return key generated - share it with the chat creator! 📤", "green")
+                        
+                    except Exception as e:
+                        print(f"❌ Error displaying return key: {e}")
+                else:
+                    print("❌ return_display_text not found!")
+            else:
+                print("❌ return_display_frame not found!")
+                # Fallback to the old popup method if something went wrong
+                messagebox.showinfo(
+                    "Return Key Generated", 
+                    f"Share this return key with the chat creator:\n\n{return_key}\n\n"
+                    "This has been copied to your clipboard."
+                )
+                self.root.clipboard_clear()
+                self.root.clipboard_append(return_key)
     
     def show_chat(self) -> None:
         """Transition to the chat interface."""
-        self._show_chat_panel()
+        # Complete the wizard if it's active
+        if self.connection_wizard:
+            self.connection_wizard.complete_wizard()
+        else:
+            self._show_chat_panel()
     
     def add_message(self, message: str, tag: str = None) -> None:
         """Add a message to the chat display with appropriate styling."""
@@ -922,6 +1218,9 @@ class ModernChatWindow:
     
     def get_username(self) -> str:
         """Get the current username."""
+        # If wizard is active, get username from wizard
+        if self.connection_wizard:
+            return self.connection_wizard.get_username()
         return self.stored_username if self.stored_username else "Anonymous"
     
     # User list management methods
@@ -933,22 +1232,23 @@ class ModernChatWindow:
                 self.user_list_display.configure(state="normal")
                 self.user_list_display.delete("1.0", "end")
                 
-                # Add local user first
-                local_status = "🟢 Online (You)"
-                if self.voice_enabled:
-                    local_status += " 🎤"
-                self.user_list_display.insert("end", f"{self.get_username()}\n{local_status}\n\n")
-                
-                # Add connected peers
+                # Add all users (including local user)
                 for user_id, user_info in users.items():
                     username = user_info.get('username', 'Peer')
                     status = user_info.get('status', 'online')
                     voice_status = user_info.get('voice_enabled', False)
                     
-                    status_icon = "🟢" if status == "online" else "🔴"
+                    # Special handling for local user
+                    if user_id == "local_001":
+                        status_icon = "🟢"
+                        status_text = "Online (You)"
+                    else:
+                        status_icon = "🟢" if status == "online" else "🔴"
+                        status_text = "Online"
+                    
                     voice_icon = " 🎤" if voice_status else ""
                     
-                    self.user_list_display.insert("end", f"{username}\n{status_icon} Online{voice_icon}\n\n")
+                    self.user_list_display.insert("end", f"{username}\n{status_icon} {status_text}{voice_icon}\n\n")
                 
                 self.user_list_display.configure(state="disabled")
                 
@@ -965,8 +1265,8 @@ class ModernChatWindow:
         }
         self.update_user_list(self.connected_users)
         
-        # Add system message about user joining (but not for generic "Peer" placeholder)
-        if username != "Peer":
+        # Add system message about user joining (but not for local user or generic "Peer" placeholder)
+        if username != "Peer" and user_id != "local_001":
             timestamp = datetime.now().strftime("%H:%M:%S")
             join_message = f"[{timestamp}] 👋 {username} joined the chat"
             self.add_message(join_message, "system")
@@ -1206,6 +1506,11 @@ class ModernChatWindow:
             # Stop voice chat (disable and stop transmission)
             self.voice_enabled = False
             self.voice_transmitting = False
+            
+            # Update local user's voice status in connected_users
+            if "local_001" in self.connected_users:
+                self.connected_users["local_001"]["voice_enabled"] = False
+            
             self.voice_enable_btn.configure(text="🎤 Start Voice Chat", fg_color=("gray60", "gray40"))
             # Removed voice status label to prevent UI shifting
             if self.on_disable_voice:
@@ -1214,10 +1519,19 @@ class ModernChatWindow:
             # Start voice chat (enable and start transmission immediately)
             self.voice_enabled = True
             self.voice_transmitting = True
+            
+            # Update local user's voice status in connected_users
+            if "local_001" in self.connected_users:
+                self.connected_users["local_001"]["voice_enabled"] = True
+            
             self.voice_enable_btn.configure(text="🔇 Stop Voice Chat", fg_color=("red", "darkred"))
             # Removed voice status label to prevent UI shifting
             if self.on_enable_voice:
                 self.on_enable_voice()
+        
+        # Update user list to reflect voice status change
+        if hasattr(self, 'update_user_list'):
+            self.update_user_list(self.connected_users)
 
     # Removed push-to-talk methods - now using simple toggle
 
@@ -1226,6 +1540,11 @@ class ModernChatWindow:
     def set_voice_enabled(self, enabled: bool) -> None:
         """Set voice enabled state from external source."""
         self.voice_enabled = enabled
+        
+        # Update local user's voice status in connected_users
+        if "local_001" in self.connected_users:
+            self.connected_users["local_001"]["voice_enabled"] = enabled
+        
         if hasattr(self, 'voice_enable_btn'):
             if enabled:
                 self.voice_enable_btn.configure(
@@ -1249,64 +1568,30 @@ class ModernChatWindow:
         try:
             if self.on_disconnect_chat:
                 self.on_disconnect_chat()
-            # Return to start panel
-            self._show_start_panel()
+            # Return to connection wizard instead of start panel
+            self._show_connection_wizard()
             self.set_status("Disconnected from chat", "gray")
         except Exception as e:
             logger.error(f"Error disconnecting from chat: {e}")
             self.show_error(f"Failed to disconnect: {e}")
-
-    # Removed _on_space_press - using simple toggle now
-
-    # Removed update_voice_status - no longer needed
-
-    def set_voice_enabled(self, enabled: bool) -> None:
-        """Set voice enabled state from external source."""
-        self.voice_enabled = enabled
-        if hasattr(self, 'voice_enable_btn'):
-            if enabled:
-                self.voice_enable_btn.configure(
-                    text="🔇 Stop Voice Chat",
-                    fg_color=("red", "darkred")
-                )
-            else:
-                self.voice_enable_btn.configure(
-                    text="🎤 Start Voice Chat",
-                    fg_color=("gray60", "gray40")
-                )
-        # Removed voice_ptt_btn references - using simple toggle now
-        # Removed voice status label to prevent UI shifting
-        
-        # Update user list to reflect voice status change
-        if hasattr(self, 'update_user_list'):
-            self.update_user_list(self.connected_users)
-
-    # Removed _on_voice_toggle_mode - now using simple toggle
-
-    # Removed _on_space_press - using simple toggle now
-
-    # Removed update_voice_status - no longer needed
-
-    def set_voice_enabled(self, enabled: bool) -> None:
-        """Set voice enabled state from external source."""
-        self.voice_enabled = enabled
-        if hasattr(self, 'voice_enable_btn'):
-            if enabled:
-                self.voice_enable_btn.configure(
-                    text="🔇 Stop Voice Chat",
-                    fg_color=("red", "darkred")
-                )
-            else:
-                self.voice_enable_btn.configure(
-                    text="🎤 Start Voice Chat",
-                    fg_color=("gray60", "gray40")
-                )
-        # Removed voice_ptt_btn references - using simple toggle now
-        # Removed voice status label to prevent UI shifting
-        
-        # Update user list to reflect voice status change
-        if hasattr(self, 'update_user_list'):
-            self.update_user_list(self.connected_users) 
+    
+    def reset_wizard_state(self) -> None:
+        """Reset the connection wizard to initial state."""
+        try:
+            if self.connection_wizard:
+                # Reset wizard state
+                self.connection_wizard.current_step = self.connection_wizard.WizardStep.WELCOME
+                self.connection_wizard.step_history.clear()
+                self.connection_wizard.connection_type = None
+                self.connection_wizard.invite_key = ""
+                self.connection_wizard.return_key = ""
+                
+                # Show the welcome step
+                self.connection_wizard._show_step(self.connection_wizard.WizardStep.WELCOME)
+                
+                logger.info("Wizard state reset to initial state")
+        except Exception as e:
+            logger.error(f"Error resetting wizard state: {e}") 
     # Placeholder text handling methods
     
     def _setup_placeholder_text(self, textbox: ctk.CTkTextbox, placeholder: str) -> None:

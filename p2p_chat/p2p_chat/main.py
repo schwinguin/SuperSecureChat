@@ -601,8 +601,12 @@ class P2PChatApp:
             self.window.add_message("🔒 Your communication is end-to-end encrypted!", "system")
             self.window.set_status("Ready to chat", "green")
             
-            # Initialize user list with peer connection
-            # For P2P, we add a generic "Peer" user since we don't have user identification yet
+            # Initialize user list with both local user and peer
+            # Add local user first
+            local_username = self.window.get_username()
+            self.window.add_user("local_001", local_username)
+            
+            # Add peer user (will be updated when we receive their username)
             peer_username = getattr(self, 'peer_username', 'Peer')
             self.window.add_user("peer_001", peer_username)
             
@@ -617,8 +621,9 @@ class P2PChatApp:
         
         def update_gui():
             self.window.set_status("Channel Closed", "orange")
-            # Remove peer from user list
+            # Remove both users from user list
             self.window.remove_user("peer_001")
+            self.window.remove_user("local_001")
         
         self._safe_after(0, update_gui)
     
@@ -891,13 +896,16 @@ class P2PChatApp:
             if self.peer and self.peer.is_connected:
                 # Send a disconnect message to peer before closing
                 try:
-                    self.peer.send_message("__DISCONNECT__")
+                    self.peer.send("__DISCONNECT__")
                     await asyncio.sleep(0.1)  # Brief delay to allow message to send
                 except Exception as e:
                     logger.warning(f"Failed to send disconnect message: {e}")
                 
                 # Close the peer connection
                 await self.peer.close()
+            
+            # Reset all connection state for fresh start
+            await self._reset_connection_state()
             
             # Update GUI in main thread
             def update_gui():
@@ -910,6 +918,112 @@ class P2PChatApp:
             error_msg = f"Error during disconnect: {e}"
             logger.error(error_msg)
             self._safe_after(0, lambda msg=error_msg: self.window.show_error(msg))
+    
+    async def _reset_connection_state(self) -> None:
+        """Reset all connection-related state for a fresh start."""
+        try:
+            logger.info("Resetting connection state...")
+            
+            # Reset peer connection state
+            if self.peer:
+                # Close existing peer connection safely
+                try:
+                    await self.peer.close()
+                except Exception as e:
+                    logger.warning(f"Error closing existing peer: {e}")
+                finally:
+                    # Always create a new peer instance
+                    self.peer = None
+            
+            # Create a completely fresh peer instance
+            self.peer = RTCPeer()
+            
+            # Reapply settings to new peer
+            audio_settings = self.settings_manager.get_audio_settings()
+            self.peer.update_audio_settings(audio_settings)
+            
+            connection_settings = self.settings_manager.get_connection_settings()
+            stun_servers = connection_settings.get('stun_servers', ['stun:stun.l.google.com:19302'])
+            self.peer.update_stun_servers(stun_servers)
+            
+            # Reconfigure reconnection settings
+            self.configure_reconnection()
+            
+            # Re-setup peer event handlers
+            self._setup_peer_events()
+            
+            # Reset application state
+            self.peer_username = "Peer"
+            
+            # Reset GUI state in main thread
+            def reset_gui():
+                if self.window:
+                    # Reset GUI state variables
+                    self.window.connected_users.clear()
+                    self.window.local_username = "You"
+                    self.window.voice_enabled = False
+                    self.window.voice_transmitting = False
+                    
+                    # Clear any active file transfer dialogs
+                    for dialog in list(self.window.active_progress_dialogs.values()):
+                        try:
+                            dialog.destroy()
+                        except:
+                            pass
+                    self.window.active_progress_dialogs.clear()
+                    
+                    # Clear chat display if it exists
+                    if hasattr(self.window, 'chat_display') and self.window.chat_display:
+                        try:
+                            self.window.chat_display.configure(state="normal")
+                            self.window.chat_display.delete("1.0", "end")
+                            self.window.chat_display.configure(state="disabled")
+                        except:
+                            pass
+                    
+                    # Clear user list if it exists
+                    if hasattr(self.window, 'user_list_display') and self.window.user_list_display:
+                        try:
+                            self.window.user_list_display.configure(state="normal")
+                            self.window.user_list_display.delete("1.0", "end")
+                            self.window.user_list_display.configure(state="disabled")
+                        except:
+                            pass
+                    
+                    # Reset wizard state
+                    self.window.reset_wizard_state()
+                    
+                    logger.info("GUI state reset completed")
+            
+            self._safe_after(0, reset_gui)
+            
+            logger.info("Connection state reset completed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error resetting connection state: {e}")
+            # Even if reset fails, try to continue with a new peer
+            try:
+                # Ensure old peer is completely removed
+                self.peer = None
+                
+                # Create fresh peer
+                self.peer = RTCPeer()
+                audio_settings = self.settings_manager.get_audio_settings()
+                self.peer.update_audio_settings(audio_settings)
+                connection_settings = self.settings_manager.get_connection_settings()
+                stun_servers = connection_settings.get('stun_servers', ['stun:stun.l.google.com:19302'])
+                self.peer.update_stun_servers(stun_servers)
+                self.configure_reconnection()
+                self._setup_peer_events()
+                logger.info("Fallback peer creation completed")
+            except Exception as e2:
+                logger.error(f"Fallback peer creation failed: {e2}")
+                # Last resort - create minimal peer
+                try:
+                    self.peer = RTCPeer()
+                    logger.info("Minimal peer creation completed")
+                except Exception as e3:
+                    logger.error(f"Minimal peer creation failed: {e3}")
     
     def _send_username_exchange(self) -> None:
         """Send username to peer for immediate identification."""
