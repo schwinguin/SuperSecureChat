@@ -70,6 +70,10 @@ class ModernChatWindow:
         # File transfer tracking
         self.active_progress_dialogs: Dict[str, FileProgressDialog] = {}
         
+        # User list tracking
+        self.connected_users: Dict[str, Dict[str, Any]] = {}
+        self.local_username = "You"
+        
         self._setup_ui()
         self._show_start_panel()
     
@@ -453,28 +457,73 @@ class ModernChatWindow:
         print("✅ Join panel setup complete")
     
     def _show_chat_panel(self) -> None:
-        """Show the enhanced chat interface with file transfer and voice chat capabilities."""
+        """Show the enhanced chat interface with file transfer, voice chat, and user list capabilities."""
         self._clear_panel()
         
-        # Single panel for chat
+        # Main panel for chat with two columns: chat area and user list
         panel = ctk.CTkFrame(self.content_frame, corner_radius=10)
         panel.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        panel.grid_columnconfigure(0, weight=1)
+        panel.grid_columnconfigure(0, weight=1)  # Chat area takes most space
+        panel.grid_columnconfigure(1, weight=0)  # User list has fixed width
         panel.grid_rowconfigure(0, weight=1)
+        
+        # Chat area frame
+        chat_frame = ctk.CTkFrame(panel, corner_radius=8, fg_color="transparent")
+        chat_frame.grid(row=0, column=0, sticky="nsew", padx=(15, 5), pady=15)
+        chat_frame.grid_columnconfigure(0, weight=1)
+        chat_frame.grid_rowconfigure(0, weight=1)  # Chat display gets most space
+        chat_frame.grid_rowconfigure(1, weight=0)  # Input frame has fixed height
         
         # Chat display area
         self.chat_display = ctk.CTkTextbox(
-            panel,
+            chat_frame,
             corner_radius=8,
             font=ctk.CTkFont(size=16),  # Keep larger font for readability
             state="disabled",
             wrap="word"
         )
-        self.chat_display.grid(row=0, column=0, sticky="nsew", padx=15, pady=15, columnspan=2)
+        self.chat_display.grid(row=0, column=0, sticky="nsew")
+        
+        # User list sidebar
+        user_list_frame = ctk.CTkFrame(panel, corner_radius=8, width=200)
+        user_list_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 15), pady=15)
+        user_list_frame.grid_columnconfigure(0, weight=1)
+        user_list_frame.grid_rowconfigure(1, weight=1)
+        user_list_frame.grid_propagate(False)  # Maintain fixed width
+        
+        # User list header
+        user_list_header = ctk.CTkLabel(
+            user_list_frame,
+            text="👥 Participants",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=("gray20", "gray80")
+        )
+        user_list_header.grid(row=0, column=0, pady=(10, 5), padx=10)
+        
+        # User list display
+        self.user_list_display = ctk.CTkTextbox(
+            user_list_frame,
+            corner_radius=6,
+            font=ctk.CTkFont(size=12),
+            state="disabled",
+            height=100,
+            fg_color=("gray90", "gray20")
+        )
+        self.user_list_display.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        
+        # Connection info
+        self.connection_info = ctk.CTkLabel(
+            user_list_frame,
+            text="🔗 Connection: P2P\n🔒 Encrypted",
+            font=ctk.CTkFont(size=10),
+            text_color=("gray40", "gray60"),
+            justify="left"
+        )
+        self.connection_info.grid(row=2, column=0, pady=(0, 10), padx=10)
 
-        # Input and controls frame (compact)
-        input_frame = ctk.CTkFrame(panel, fg_color="transparent")
-        input_frame.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 15), columnspan=2)
+        # Input and controls frame (compact) - positioned under chat area
+        input_frame = ctk.CTkFrame(chat_frame, fg_color="transparent")
+        input_frame.grid(row=1, column=0, sticky="ew", pady=(10, 0))
         input_frame.grid_columnconfigure(0, weight=1)
 
         # Message input (smaller)
@@ -853,6 +902,76 @@ class ModernChatWindow:
         """Get the current username."""
         return self.stored_username if self.stored_username else "Anonymous"
     
+    # User list management methods
+    
+    def update_user_list(self, users: Dict[str, Dict[str, Any]]) -> None:
+        """Update the user list display."""
+        if hasattr(self, 'user_list_display'):
+            try:
+                self.user_list_display.configure(state="normal")
+                self.user_list_display.delete("1.0", "end")
+                
+                # Add local user first
+                local_status = "🟢 Online (You)"
+                if self.voice_enabled:
+                    local_status += " 🎤"
+                self.user_list_display.insert("end", f"{self.get_username()}\n{local_status}\n\n")
+                
+                # Add connected peers
+                for user_id, user_info in users.items():
+                    username = user_info.get('username', 'Peer')
+                    status = user_info.get('status', 'online')
+                    voice_status = user_info.get('voice_enabled', False)
+                    
+                    status_icon = "🟢" if status == "online" else "🔴"
+                    voice_icon = " 🎤" if voice_status else ""
+                    
+                    self.user_list_display.insert("end", f"{username}\n{status_icon} Online{voice_icon}\n\n")
+                
+                self.user_list_display.configure(state="disabled")
+                
+            except Exception as e:
+                logger.error(f"Error updating user list: {e}")
+    
+    def add_user(self, user_id: str, username: str, status: str = "online") -> None:
+        """Add a user to the connected users list."""
+        self.connected_users[user_id] = {
+            'username': username,
+            'status': status,
+            'voice_enabled': False,
+            'connected_at': datetime.now()
+        }
+        self.update_user_list(self.connected_users)
+        
+        # Add system message about user joining
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        join_message = f"[{timestamp}] 👋 {username} joined the chat"
+        self.add_message(join_message, "system")
+    
+    def remove_user(self, user_id: str) -> None:
+        """Remove a user from the connected users list."""
+        if user_id in self.connected_users:
+            username = self.connected_users[user_id].get('username', 'Unknown')
+            del self.connected_users[user_id]
+            self.update_user_list(self.connected_users)
+            
+            # Add system message about user leaving
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            leave_message = f"[{timestamp}] 👋 {username} left the chat"
+            self.add_message(leave_message, "system")
+    
+    def update_user_voice_status(self, user_id: str, voice_enabled: bool) -> None:
+        """Update a user's voice chat status."""
+        if user_id in self.connected_users:
+            self.connected_users[user_id]['voice_enabled'] = voice_enabled
+            self.update_user_list(self.connected_users)
+    
+    def set_local_username(self, username: str) -> None:
+        """Set the local username and update display."""
+        self.local_username = username
+        self.stored_username = username
+        self.update_user_list(self.connected_users)
+    
     # File transfer event handlers
     
     def show_file_offer(self, offer_data: Dict[str, Any]) -> None:
@@ -1128,6 +1247,10 @@ class ModernChatWindow:
                 self.voice_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
             else:
                 self.voice_status_label.grid_remove()
+        
+        # Update user list to reflect voice status change
+        if hasattr(self, 'update_user_list'):
+            self.update_user_list(self.connected_users)
 
     def _on_disconnect(self) -> None:
         """Handle disconnect button click."""
@@ -1176,6 +1299,10 @@ class ModernChatWindow:
                 self.voice_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
             else:
                 self.voice_status_label.grid_remove()
+        
+        # Update user list to reflect voice status change
+        if hasattr(self, 'update_user_list'):
+            self.update_user_list(self.connected_users)
 
     def _on_voice_toggle_mode(self) -> None:
         """Handle voice toggle mode button click (for toggle instead of push-to-talk)."""
@@ -1225,4 +1352,8 @@ class ModernChatWindow:
                 self.voice_status_label.configure(text="💡 Hold 'Talk' button or SPACE (when not typing) to transmit")
                 self.voice_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
             else:
-                self.voice_status_label.grid_remove() 
+                self.voice_status_label.grid_remove()
+        
+        # Update user list to reflect voice status change
+        if hasattr(self, 'update_user_list'):
+            self.update_user_list(self.connected_users) 

@@ -578,6 +578,11 @@ class P2PChatApp:
             self.window.add_message("=== Connected to peer ===", "system")
             self.window.add_message("🔒 Your communication is end-to-end encrypted!", "system")
             self.window.set_status("Ready to chat", "green")
+            
+            # Initialize user list with peer connection
+            # For P2P, we add a generic "Peer" user since we don't have user identification yet
+            peer_username = getattr(self, 'peer_username', 'Peer')
+            self.window.add_user("peer_001", peer_username)
         
         self._safe_after(0, update_gui)
     
@@ -587,6 +592,8 @@ class P2PChatApp:
         
         def update_gui():
             self.window.set_status("Channel Closed", "orange")
+            # Remove peer from user list
+            self.window.remove_user("peer_001")
         
         self._safe_after(0, update_gui)
     
@@ -759,9 +766,13 @@ class P2PChatApp:
             if state == "enabled":
                 self.window.set_voice_enabled(True)
                 self.window.update_voice_status("Voice Chat: Enabled")
+                # Update peer voice status in user list
+                self.window.update_user_voice_status("peer_001", True)
             elif state == "disabled":
                 self.window.set_voice_enabled(False)
                 self.window.update_voice_status("Voice Chat: Disabled")
+                # Update peer voice status in user list
+                self.window.update_user_voice_status("peer_001", False)
             elif state == "transmitting":
                 self.window.update_voice_status("Voice Chat: Transmitting")
             elif state == "listening":
