@@ -17,18 +17,19 @@ logger = logging.getLogger(__name__)
 
 def get_executable_dir() -> Path:
     """
-    Get the directory where the executable is located.
-    This works for both script execution and PyInstaller executables.
+    Get the project directory where settings and other files should be stored.
+    This is the directory containing run_app.sh and other project files.
     
     Returns:
-        Path: The directory containing the executable or script
+        Path: The project directory (where run_app.sh is located)
     """
     if getattr(sys, 'frozen', False):
         # Running as PyInstaller executable
         executable_dir = Path(sys.executable).parent
     else:
-        # Running as script
-        executable_dir = Path(__file__).parent.parent.parent
+        # Running as script - go up 2 levels from utils.py to project root
+        # utils.py -> p2p_chat/ -> project_root/
+        executable_dir = Path(__file__).parent.parent
     
     return executable_dir
 
@@ -36,26 +37,23 @@ def get_executable_dir() -> Path:
 def setup_logging(level: int = logging.INFO) -> None:
     """
     Set up logging configuration for the application.
+    Logs only to console for security reasons (no log files created).
     
     Args:
         level: Logging level (default: INFO)
     """
-    # Get executable directory for log file
-    executable_dir = get_executable_dir()
-    log_file = executable_dir / "p2p_chat.log"
-    
-    # Configure logging to both file and console
+    # Configure logging to console only (no file logging for security)
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%H:%M:%S',
         handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
             logging.StreamHandler()
         ]
     )
     
-    logger.info(f"Logging initialized. Log file: {log_file}")
+    logger = logging.getLogger(__name__)
+    logger.info("Logging initialized (console only - no log files for security)")
 
 
 def log_to_tk(text_widget: tk.Text, message: str, tag: str = None) -> None:

@@ -44,7 +44,15 @@ class SettingsManager:
                 "initial_reconnection_delay": 2.0,
                 "max_reconnection_delay": 30.0,
                 "connection_timeout": 15.0,
-                "heartbeat_interval": 1.0
+                "heartbeat_interval": 1.0,
+                "stun_servers": [
+                    "stun:stun.l.google.com:19302",
+                    "stun:stun.stunprotocol.org:3478",
+                    "stun:stun1.l.google.com:19302",
+                    "stun:stun2.l.google.com:19302"
+                ],
+                "custom_stun_server": "",
+                "use_custom_stun": False
             }
         }
         

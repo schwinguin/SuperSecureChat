@@ -7,6 +7,7 @@ import logging
 import re
 import os
 import hashlib
+import urllib.parse
 from typing import Optional, List, Dict, Any, Set
 from aiortc import RTCPeerConnection
 
@@ -455,4 +456,113 @@ def log_security_status(pc: RTCPeerConnection) -> None:
     else:
         logger.warning("⚠️  Connection security cannot be verified")
     
-    logger.info("=== END SECURITY STATUS ===") 
+    logger.info("=== END SECURITY STATUS ===")
+
+
+def validate_stun_url(stun_url: str) -> str:
+    """
+    Validate and sanitize a STUN server URL.
+    
+    Args:
+        stun_url: The STUN URL to validate
+        
+    Returns:
+        The validated and sanitized STUN URL
+        
+    Raises:
+        SecurityViolation: If the URL is invalid or potentially malicious
+    """
+    if not stun_url or not isinstance(stun_url, str):
+        raise SecurityViolation("STUN URL must be a non-empty string")
+    
+    # Remove whitespace
+    stun_url = stun_url.strip()
+    
+    if not stun_url:
+        raise SecurityViolation("STUN URL cannot be empty")
+    
+    # Check length
+    if len(stun_url) > 200:
+        raise SecurityViolation("STUN URL too long (max 200 characters)")
+    
+    # Must start with stun: or stuns:
+    if not stun_url.startswith(('stun:', 'stuns:')):
+        raise SecurityViolation("STUN URL must start with 'stun:' or 'stuns:'")
+    
+    try:
+        # Parse the URL - for STUN URLs, we need to handle them specially
+        # since urllib.parse doesn't recognize stun: as having netloc
+        if stun_url.startswith('stun:'):
+            scheme = 'stun'
+            netloc = stun_url[5:]  # Remove 'stun:'
+        elif stun_url.startswith('stuns:'):
+            scheme = 'stuns'
+            netloc = stun_url[6:]  # Remove 'stuns:'
+        else:
+            raise SecurityViolation("Invalid STUN URL scheme")
+        
+        # Parse host and port from netloc
+        if ':' in netloc:
+            hostname, port_str = netloc.rsplit(':', 1)
+            try:
+                port = int(port_str)
+                if not (1 <= port <= 65535):
+                    raise SecurityViolation("Invalid port number in STUN URL")
+            except ValueError:
+                raise SecurityViolation("Invalid port number in STUN URL")
+        else:
+            hostname = netloc
+            port = None
+        
+        # Must have hostname
+        if not hostname:
+            raise SecurityViolation("STUN URL must have a hostname")
+        
+        # Validate hostname (basic check for dangerous characters)
+        hostname = hostname.lower()
+        if re.search(r'[^a-z0-9.-]', hostname):
+            raise SecurityViolation("Invalid characters in STUN hostname")
+        
+        # Check for localhost/private IPs if desired (optional - users might want local STUN)
+        # For now, we'll allow them but log a warning
+        if hostname in ('localhost', '127.0.0.1', '::1') or hostname.startswith('192.168.') or hostname.startswith('10.') or hostname.startswith('172.'):
+            logger.warning(f"Using local/private STUN server: {hostname}")
+        
+        # Reconstruct clean URL
+        port_part = f":{port}" if port else ""
+        clean_url = f"{scheme}:{hostname}{port_part}"
+        
+        logger.debug(f"STUN URL validation passed: {clean_url}")
+        return clean_url
+        
+    except ValueError as e:
+        raise SecurityViolation(f"Invalid STUN URL format: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error validating STUN URL: {e}")
+        raise SecurityViolation(f"STUN URL validation failed: {e}")
+
+
+def validate_stun_servers(stun_servers: List[str]) -> List[str]:
+    """
+    Validate a list of STUN server URLs.
+    
+    Args:
+        stun_servers: List of STUN server URLs
+        
+    Returns:
+        List of validated STUN server URLs
+        
+    Raises:
+        SecurityViolation: If any URL is invalid
+    """
+    if not stun_servers:
+        raise SecurityViolation("At least one STUN server must be provided")
+    
+    if len(stun_servers) > 10:
+        raise SecurityViolation("Too many STUN servers (max 10)")
+    
+    validated_servers = []
+    for server in stun_servers:
+        validated_servers.append(validate_stun_url(server))
+    
+    return validated_servers 

@@ -14,6 +14,7 @@ from typing import Callable, Optional, Dict, Any
 from .file_transfer_dialog import FileTransferDialog
 from .file_progress_dialog import FileProgressDialog
 from .audio_settings_dialog import AudioSettingsDialog
+from .connection_settings_dialog import ConnectionSettingsDialog
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +49,17 @@ class ModernChatWindow:
         # Voice chat callbacks
         self.on_enable_voice: Optional[Callable] = None
         self.on_disable_voice: Optional[Callable] = None
-        self.on_start_voice_transmission: Optional[Callable] = None
-        self.on_stop_voice_transmission: Optional[Callable] = None
+        # Removed separate transmission callbacks - now using simple toggle
         
         # Audio settings callback
         self.on_audio_settings_changed: Optional[Callable] = None
         
-        # Audio settings storage
+        # Connection settings callback
+        self.on_connection_settings_changed: Optional[Callable] = None
+        
+        # Settings storage
         self.current_audio_settings: Dict[str, Any] = {}
+        self.current_connection_settings: Dict[str, Any] = {}
         
         # UI state
         self.current_panel = None
@@ -117,6 +121,17 @@ class ModernChatWindow:
         )
         self.status_label.grid(row=0, column=0, pady=8)
         
+        # Connection settings button
+        self.connection_settings_button = ctk.CTkButton(
+            status_frame,
+            text="🌐",
+            width=40,
+            height=30,
+            command=self._show_connection_settings,
+            font=ctk.CTkFont(size=16)
+        )
+        self.connection_settings_button.grid(row=0, column=1, padx=(0, 5), pady=5, sticky="e")
+        
         # Audio settings button
         self.audio_settings_button = ctk.CTkButton(
             status_frame,
@@ -126,7 +141,7 @@ class ModernChatWindow:
             command=self._show_audio_settings,
             font=ctk.CTkFont(size=16)
         )
-        self.audio_settings_button.grid(row=0, column=1, padx=(0, 5), pady=5, sticky="e")
+        self.audio_settings_button.grid(row=0, column=2, padx=(0, 5), pady=5, sticky="e")
         
         # Theme toggle button
         self.theme_button = ctk.CTkButton(
@@ -137,7 +152,7 @@ class ModernChatWindow:
             command=self._toggle_theme,
             font=ctk.CTkFont(size=16)
         )
-        self.theme_button.grid(row=0, column=2, padx=(0, 10), pady=5, sticky="e")
+        self.theme_button.grid(row=0, column=3, padx=(0, 10), pady=5, sticky="e")
     
     def _toggle_theme(self):
         """Toggle between dark and light themes."""
@@ -147,6 +162,25 @@ class ModernChatWindow:
         
         # Update theme button emoji
         self.theme_button.configure(text="☀️" if new_mode == "dark" else "🌙")
+    
+    def _show_connection_settings(self):
+        """Show the connection settings dialog."""
+        try:
+            dialog = ConnectionSettingsDialog(self.root, self.current_connection_settings)
+            dialog.on_settings_saved = self._on_connection_settings_saved
+            dialog.show()
+        except Exception as e:
+            logger.error(f"Failed to show connection settings: {e}")
+            messagebox.showerror("Error", f"Failed to open connection settings:\n{e}")
+    
+    def _on_connection_settings_saved(self, settings: Dict[str, Any]):
+        """Handle connection settings being saved."""
+        self.current_connection_settings.update(settings)
+        logger.info(f"Connection settings updated in GUI: {settings}")
+        
+        # Notify the main application
+        if self.on_connection_settings_changed:
+            self.on_connection_settings_changed(settings)
     
     def _show_audio_settings(self):
         """Show the audio settings dialog."""
@@ -182,6 +216,10 @@ class ModernChatWindow:
     def set_audio_settings(self, settings: Dict[str, Any]):
         """Set the current audio settings from external source."""
         self.current_audio_settings = settings
+    
+    def set_connection_settings(self, settings: Dict[str, Any]):
+        """Set the current connection settings from external source."""
+        self.current_connection_settings = settings
     
     def _show_start_panel(self) -> None:
         """Show the simplified start panel with Create/Join buttons."""
@@ -300,6 +338,7 @@ class ModernChatWindow:
         self.copy_invite_btn = ctk.CTkButton(
             panel,
             text="📋 Copy to Clipboard",
+            width=160,  # Fixed width to prevent shifting
             height=35,
             font=ctk.CTkFont(size=14),
             corner_radius=8,
@@ -324,11 +363,15 @@ class ModernChatWindow:
             corner_radius=8
         )
         self.return_entry.grid(row=6, column=0, sticky="ew", padx=20, pady=(0, 10))
-        self.return_entry.insert("0.0", "Paste the return key from your peer here...")
+        
+        # Set up placeholder text for return entry
+        self.return_entry_placeholder = "Paste the return key from your peer here..."
+        self._setup_placeholder_text(self.return_entry, self.return_entry_placeholder)
         
         self.connect_btn = ctk.CTkButton(
             panel,
             text="🔗 Connect Now",
+            width=160,  # Fixed width to prevent shifting
             height=40,
             font=ctk.CTkFont(size=16, weight="bold"),
             corner_radius=8,
@@ -394,11 +437,15 @@ class ModernChatWindow:
             corner_radius=8
         )
         self.join_entry.grid(row=3, column=0, sticky="ew", padx=30, pady=(0, 10))
-        self.join_entry.insert("0.0", "Paste the invite key here...")
+        
+        # Set up placeholder text for join entry
+        self.join_entry_placeholder = "Paste the invite key here..."
+        self._setup_placeholder_text(self.join_entry, self.join_entry_placeholder)
         
         self.join_submit_btn = ctk.CTkButton(
             panel,
             text="🚀 Join Chat",
+            width=160,  # Fixed width to prevent shifting
             height=45,
             font=ctk.CTkFont(size=16, weight="bold"),
             corner_radius=10,
@@ -431,6 +478,7 @@ class ModernChatWindow:
         self.copy_return_btn = ctk.CTkButton(
             self.return_display_frame,
             text="📋 Copy Return Key",
+            width=160,  # Fixed width to prevent shifting
             height=35,
             font=ctk.CTkFont(size=14),
             corner_radius=8,
@@ -574,11 +622,11 @@ class ModernChatWindow:
         )
         self.file_btn.grid(row=0, column=1, padx=5, sticky="w")
 
-        # Voice enable button (compact)
+        # Voice enable button (fixed width to prevent shifting)
         self.voice_enable_btn = ctk.CTkButton(
             button_row,
-            text="🎤 Voice",
-            width=80,
+            text="🎤 Start Voice Chat",
+            width=140,  # Fixed width to accommodate both text states
             height=32,
             font=ctk.CTkFont(size=13, weight="bold"),
             corner_radius=6,
@@ -588,23 +636,7 @@ class ModernChatWindow:
         )
         self.voice_enable_btn.grid(row=0, column=2, padx=5, sticky="w")
 
-        # Push-to-talk button (compact, initially hidden)
-        self.voice_ptt_btn = ctk.CTkButton(
-            button_row,
-            text="🗣️ Talk",
-            width=70,
-            height=32,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            corner_radius=6,
-            state="disabled",
-            fg_color=("gray40", "gray40"),
-            hover_color=("gray50", "gray30")
-        )
-        self.voice_ptt_btn.grid(row=0, column=3, padx=5, sticky="w")
-
-        # Bind mouse events for push-to-talk
-        self.voice_ptt_btn.bind("<Button-1>", self._on_voice_start)
-        self.voice_ptt_btn.bind("<ButtonRelease-1>", self._on_voice_stop)
+        # Removed push-to-talk button - now using simple voice toggle
 
         # Disconnect button (compact, right side)
         self.disconnect_btn = ctk.CTkButton(
@@ -620,24 +652,14 @@ class ModernChatWindow:
         )
         self.disconnect_btn.grid(row=0, column=4, sticky="e")
 
-        # Compact status/voice info (optional, only when voice is active)
-        self.voice_status_label = ctk.CTkLabel(
-            input_frame,
-            text="",
-            font=ctk.CTkFont(size=11),
-            text_color=("gray40", "gray60"),
-            height=0  # Minimal height
-        )
-        # Initially hidden
+        # Removed voice status label to prevent UI shifting
 
         self.current_panel = panel
         
         # Focus on message entry
         self.message_entry.focus()
         
-        # Bind keyboard shortcuts for voice
-        self.root.bind("<KeyPress-space>", self._on_space_press)
-        self.root.bind("<KeyRelease-space>", self._on_space_release)
+        # Removed keyboard shortcuts - now using simple voice toggle
     
     def _on_send_file(self) -> None:
         """Handle send file button click."""
@@ -704,7 +726,7 @@ class ModernChatWindow:
     def _on_join_with_key(self) -> None:
         """Handle join with key submission."""
         if hasattr(self, 'join_entry'):
-            invite_key = self.join_entry.get("1.0", "end-1c").strip()
+            invite_key = self._get_textbox_content(self.join_entry)
             if invite_key and self.on_join_chat:
                 self.on_join_chat(invite_key)
             else:
@@ -715,7 +737,7 @@ class ModernChatWindow:
     def _on_connect(self) -> None:
         """Handle connect button click."""
         if hasattr(self, 'return_entry'):
-            return_key = self.return_entry.get("1.0", "end-1c").strip()
+            return_key = self._get_textbox_content(self.return_entry)
             if return_key and self.on_connect_chat:
                 self.on_connect_chat(return_key)
             else:
@@ -943,10 +965,11 @@ class ModernChatWindow:
         }
         self.update_user_list(self.connected_users)
         
-        # Add system message about user joining
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        join_message = f"[{timestamp}] 👋 {username} joined the chat"
-        self.add_message(join_message, "system")
+        # Add system message about user joining (but not for generic "Peer" placeholder)
+        if username != "Peer":
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            join_message = f"[{timestamp}] 👋 {username} joined the chat"
+            self.add_message(join_message, "system")
     
     def remove_user(self, user_id: str) -> None:
         """Remove a user from the connected users list."""
@@ -965,6 +988,14 @@ class ModernChatWindow:
         if user_id in self.connected_users:
             self.connected_users[user_id]['voice_enabled'] = voice_enabled
             self.update_user_list(self.connected_users)
+    
+    def update_user_username(self, user_id: str, new_username: str) -> None:
+        """Update a user's username."""
+        if user_id in self.connected_users:
+            old_username = self.connected_users[user_id].get('username', 'Unknown')
+            self.connected_users[user_id]['username'] = new_username
+            self.update_user_list(self.connected_users)
+            logger.info(f"Updated user {user_id} username from '{old_username}' to '{new_username}'")
     
     def set_local_username(self, username: str) -> None:
         """Set the local username and update display."""
@@ -1170,83 +1201,44 @@ class ModernChatWindow:
         return datetime.now().strftime("%H:%M:%S")
 
     def _on_voice_enable_toggle(self) -> None:
-        """Handle voice enable/disable button click."""
-        if self.voice_enabled:
-            # Disable voice chat
+        """Handle voice chat toggle - simple on/off switch."""
+        if self.voice_enabled and self.voice_transmitting:
+            # Stop voice chat (disable and stop transmission)
             self.voice_enabled = False
-            self.voice_enable_btn.configure(text="🎤 Voice", fg_color=("gray60", "gray40"))
-            self.voice_ptt_btn.configure(state="disabled")
-            self.voice_status_label.grid_remove()  # Hide status when disabled
+            self.voice_transmitting = False
+            self.voice_enable_btn.configure(text="🎤 Start Voice Chat", fg_color=("gray60", "gray40"))
+            # Removed voice status label to prevent UI shifting
             if self.on_disable_voice:
                 self.on_disable_voice()
         else:
-            # Enable voice chat
+            # Start voice chat (enable and start transmission immediately)
             self.voice_enabled = True
-            self.voice_enable_btn.configure(text="🎤 On", fg_color=("gray45", "gray35"))
-            self.voice_ptt_btn.configure(state="normal")
-            # Show compact status
-            self.voice_status_label.configure(text="💡 Hold 'Talk' button or SPACE (when not typing) to transmit")
-            self.voice_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+            self.voice_transmitting = True
+            self.voice_enable_btn.configure(text="🔇 Stop Voice Chat", fg_color=("red", "darkred"))
+            # Removed voice status label to prevent UI shifting
             if self.on_enable_voice:
                 self.on_enable_voice()
 
-    def _on_voice_start(self, event) -> None:
-        """Handle voice start event."""
-        if not self.voice_enabled:
-            return
-        
-        self.voice_transmitting = True
-        self.voice_ptt_btn.configure(text="🔴 ON", fg_color=("gray50", "gray30"))
-        self.voice_status_label.configure(text="🔴 Transmitting audio...")
-        if self.on_start_voice_transmission:
-            self.on_start_voice_transmission()
+    # Removed push-to-talk methods - now using simple toggle
 
-    def _on_voice_stop(self, event) -> None:
-        """Handle voice stop event."""
-        if not self.voice_enabled:
-            return
-            
-        self.voice_transmitting = False
-        self.voice_ptt_btn.configure(text="🗣️ Talk", fg_color=("gray40", "gray40"))
-        self.voice_status_label.configure(text="💡 Hold 'Talk' button or SPACE (when not typing) to transmit")
-        if self.on_stop_voice_transmission:
-            self.on_stop_voice_transmission()
-
-    def _on_space_press(self, event) -> None:
-        """Handle space key press for push-to-talk."""
-        if self.voice_enabled and not self.voice_transmitting and hasattr(self, 'message_entry'):
-            # Only activate if not typing in text field
-            if self.root.focus_get() != self.message_entry:
-                self._on_voice_start(event)
-
-    def _on_space_release(self, event) -> None:
-        """Handle space key release for push-to-talk."""
-        if self.voice_enabled and self.voice_transmitting and hasattr(self, 'message_entry'):
-            # Only deactivate if not typing in text field
-            if self.root.focus_get() != self.message_entry:
-                self._on_voice_stop(event)
-
-    def update_voice_status(self, status: str) -> None:
-        """Update voice status from external source."""
-        if hasattr(self, 'voice_status_label'):
-            self.voice_status_label.configure(text=f"Voice Chat: {status}")
+    # Removed update_voice_status - no longer needed
 
     def set_voice_enabled(self, enabled: bool) -> None:
         """Set voice enabled state from external source."""
         self.voice_enabled = enabled
         if hasattr(self, 'voice_enable_btn'):
-            self.voice_enable_btn.configure(
-                text="🎤 On" if enabled else "🎤 Voice",
-                fg_color=("gray45", "gray35") if enabled else ("gray60", "gray40")
-            )
-        if hasattr(self, 'voice_ptt_btn'):
-            self.voice_ptt_btn.configure(state="normal" if enabled else "disabled")
-        if hasattr(self, 'voice_status_label'):
             if enabled:
-                self.voice_status_label.configure(text="💡 Hold 'Talk' button or SPACE (when not typing) to transmit")
-                self.voice_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+                self.voice_enable_btn.configure(
+                    text="🔇 Stop Voice Chat",
+                    fg_color=("red", "darkred")
+                )
             else:
-                self.voice_status_label.grid_remove()
+                self.voice_enable_btn.configure(
+                    text="🎤 Start Voice Chat",
+                    fg_color=("gray60", "gray40")
+                )
+        # Removed voice_ptt_btn references - using simple toggle now
+        # Removed voice status label to prevent UI shifting
         
         # Update user list to reflect voice status change
         if hasattr(self, 'update_user_list'):
@@ -1264,96 +1256,113 @@ class ModernChatWindow:
             logger.error(f"Error disconnecting from chat: {e}")
             self.show_error(f"Failed to disconnect: {e}")
 
-    def _on_space_press(self, event) -> None:
-        """Handle space key press for push-to-talk."""
-        if self.voice_enabled and not self.voice_transmitting and hasattr(self, 'message_entry'):
-            # Only activate if not typing in text field
-            if self.root.focus_get() != self.message_entry:
-                self._on_voice_start(event)
+    # Removed _on_space_press - using simple toggle now
 
-    def _on_space_release(self, event) -> None:
-        """Handle space key release for push-to-talk."""
-        if self.voice_enabled and self.voice_transmitting and hasattr(self, 'message_entry'):
-            # Only deactivate if not typing in text field
-            if self.root.focus_get() != self.message_entry:
-                self._on_voice_stop(event)
-
-    def update_voice_status(self, status: str) -> None:
-        """Update voice status from external source."""
-        if hasattr(self, 'voice_status_label'):
-            self.voice_status_label.configure(text=f"Voice Chat: {status}")
+    # Removed update_voice_status - no longer needed
 
     def set_voice_enabled(self, enabled: bool) -> None:
         """Set voice enabled state from external source."""
         self.voice_enabled = enabled
         if hasattr(self, 'voice_enable_btn'):
-            self.voice_enable_btn.configure(
-                text="🎤 On" if enabled else "🎤 Voice",
-                fg_color=("gray45", "gray35") if enabled else ("gray60", "gray40")
-            )
-        if hasattr(self, 'voice_ptt_btn'):
-            self.voice_ptt_btn.configure(state="normal" if enabled else "disabled")
-        if hasattr(self, 'voice_status_label'):
             if enabled:
-                self.voice_status_label.configure(text="💡 Hold 'Talk' button or SPACE (when not typing) to transmit")
-                self.voice_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+                self.voice_enable_btn.configure(
+                    text="🔇 Stop Voice Chat",
+                    fg_color=("red", "darkred")
+                )
             else:
-                self.voice_status_label.grid_remove()
+                self.voice_enable_btn.configure(
+                    text="🎤 Start Voice Chat",
+                    fg_color=("gray60", "gray40")
+                )
+        # Removed voice_ptt_btn references - using simple toggle now
+        # Removed voice status label to prevent UI shifting
         
         # Update user list to reflect voice status change
         if hasattr(self, 'update_user_list'):
             self.update_user_list(self.connected_users)
 
-    def _on_voice_toggle_mode(self) -> None:
-        """Handle voice toggle mode button click (for toggle instead of push-to-talk)."""
-        if not self.voice_enabled:
-            return
-            
-        if self.voice_transmitting:
-            # Stop transmitting
-            self._on_voice_stop(None)
-            self.voice_ptt_btn.configure(text="🔄 Start Talk")
-        else:
-            # Start transmitting
-            self._on_voice_start(None) 
-            self.voice_ptt_btn.configure(text="🔄 Stop Talk")
+    # Removed _on_voice_toggle_mode - now using simple toggle
 
-    def _on_space_press(self, event) -> None:
-        """Handle space key press for push-to-talk."""
-        if self.voice_enabled and not self.voice_transmitting and hasattr(self, 'message_entry'):
-            # Only activate if not typing in text field
-            if self.root.focus_get() != self.message_entry:
-                self._on_voice_start(event)
+    # Removed _on_space_press - using simple toggle now
 
-    def _on_space_release(self, event) -> None:
-        """Handle space key release for push-to-talk."""
-        if self.voice_enabled and self.voice_transmitting and hasattr(self, 'message_entry'):
-            # Only deactivate if not typing in text field
-            if self.root.focus_get() != self.message_entry:
-                self._on_voice_stop(event)
-
-    def update_voice_status(self, status: str) -> None:
-        """Update voice status from external source."""
-        if hasattr(self, 'voice_status_label'):
-            self.voice_status_label.configure(text=f"Voice Chat: {status}")
+    # Removed update_voice_status - no longer needed
 
     def set_voice_enabled(self, enabled: bool) -> None:
         """Set voice enabled state from external source."""
         self.voice_enabled = enabled
         if hasattr(self, 'voice_enable_btn'):
-            self.voice_enable_btn.configure(
-                text="🎤 On" if enabled else "🎤 Voice",
-                fg_color=("gray45", "gray35") if enabled else ("gray60", "gray40")
-            )
-        if hasattr(self, 'voice_ptt_btn'):
-            self.voice_ptt_btn.configure(state="normal" if enabled else "disabled")
-        if hasattr(self, 'voice_status_label'):
             if enabled:
-                self.voice_status_label.configure(text="💡 Hold 'Talk' button or SPACE (when not typing) to transmit")
-                self.voice_status_label.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+                self.voice_enable_btn.configure(
+                    text="🔇 Stop Voice Chat",
+                    fg_color=("red", "darkred")
+                )
             else:
-                self.voice_status_label.grid_remove()
+                self.voice_enable_btn.configure(
+                    text="🎤 Start Voice Chat",
+                    fg_color=("gray60", "gray40")
+                )
+        # Removed voice_ptt_btn references - using simple toggle now
+        # Removed voice status label to prevent UI shifting
         
         # Update user list to reflect voice status change
         if hasattr(self, 'update_user_list'):
             self.update_user_list(self.connected_users) 
+    # Placeholder text handling methods
+    
+    def _setup_placeholder_text(self, textbox: ctk.CTkTextbox, placeholder: str) -> None:
+        """Set up placeholder text for a CTkTextbox that disappears when user types."""
+        # Store the placeholder text as an attribute
+        textbox._placeholder_text = placeholder
+        textbox._is_placeholder = True
+        
+        # Insert placeholder text initially
+        textbox.insert("0.0", placeholder)
+        textbox.configure(text_color=("gray50", "gray50"))  # Gray color for placeholder
+        
+        # Bind events
+        textbox.bind("<Button-1>", lambda e: self._on_textbox_click(textbox))
+        textbox.bind("<KeyPress>", lambda e: self._on_textbox_keypress(textbox, e))
+        textbox.bind("<Control-v>", lambda e: self._on_textbox_paste(textbox, e))
+        textbox.bind("<Shift-Insert>", lambda e: self._on_textbox_paste(textbox, e))
+        textbox.bind("<FocusOut>", lambda e: self._on_textbox_focus_out(textbox))
+    
+    def _on_textbox_click(self, textbox: ctk.CTkTextbox) -> None:
+        """Handle click on textbox with placeholder text."""
+        if getattr(textbox, '_is_placeholder', False):
+            self._clear_placeholder(textbox)
+    
+    def _on_textbox_keypress(self, textbox: ctk.CTkTextbox, event) -> None:
+        """Handle key press on textbox with placeholder text."""
+        if getattr(textbox, '_is_placeholder', False):
+            self._clear_placeholder(textbox)
+    
+    def _on_textbox_paste(self, textbox: ctk.CTkTextbox, event) -> None:
+        """Handle paste on textbox with placeholder text."""
+        if getattr(textbox, '_is_placeholder', False):
+            self._clear_placeholder(textbox)
+    
+    def _on_textbox_focus_out(self, textbox: ctk.CTkTextbox) -> None:
+        """Handle focus out - restore placeholder if empty."""
+        content = textbox.get("0.0", "end-1c").strip()
+        if not content:
+            self._restore_placeholder(textbox)
+    
+    def _clear_placeholder(self, textbox: ctk.CTkTextbox) -> None:
+        """Clear placeholder text and set normal text color."""
+        if getattr(textbox, '_is_placeholder', False):
+            textbox.delete("0.0", "end")
+            textbox.configure(text_color=("gray10", "gray90"))  # Normal text color
+            textbox._is_placeholder = False
+    
+    def _restore_placeholder(self, textbox: ctk.CTkTextbox) -> None:
+        """Restore placeholder text if textbox is empty."""
+        textbox.delete("0.0", "end")
+        textbox.insert("0.0", textbox._placeholder_text)
+        textbox.configure(text_color=("gray50", "gray50"))  # Gray color for placeholder
+        textbox._is_placeholder = True
+    
+    def _get_textbox_content(self, textbox: ctk.CTkTextbox) -> str:
+        """Get the actual content of textbox, excluding placeholder text."""
+        if getattr(textbox, '_is_placeholder', False):
+            return ""
+        return textbox.get("0.0", "end-1c").strip()

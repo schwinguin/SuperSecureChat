@@ -17,7 +17,8 @@ from .security import (
     SecurityViolation,
     log_security_status,
     get_connection_security_info,
-    verify_perfect_forward_secrecy
+    verify_perfect_forward_secrecy,
+    validate_stun_servers
 )
 from .file_transfer_mixin import FileTransferMixin
 from .voice_chat_mixin import VoiceChatMixin
@@ -42,6 +43,9 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
         self.channel: Optional[RTCDataChannel] = None
         self.is_initiator: bool = False
         
+        # STUN server configuration
+        self.stun_servers = ["stun:stun.l.google.com:19302"]  # Default
+        
         # Reconnection state
         self.original_offer: Optional[RTCSessionDescription] = None
         self.original_answer: Optional[RTCSessionDescription] = None
@@ -56,12 +60,15 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
         self.heartbeat_task: Optional[asyncio.Task] = None
         self.last_heartbeat_response: float = 0.0
         
+        # Local username for voice status updates
+        self.local_username: str = "Unknown"
+        
         self._setup_peer_connection()
     
     def _setup_peer_connection(self) -> None:
         """Initialize the RTCPeerConnection with STUN configuration."""
-        # Create RTCIceServer objects for STUN server
-        ice_servers = [RTCIceServer(urls=["stun:stun.l.google.com:19302"])]
+        # Create RTCIceServer objects from configured STUN servers
+        ice_servers = [RTCIceServer(urls=self.stun_servers)]
         
         # Create RTCConfiguration object
         config = RTCConfiguration(iceServers=ice_servers)
@@ -74,7 +81,7 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
         self.pc.on("datachannel", self._on_datachannel)
         self.pc.on("track", self._on_track)  # Add track handler for voice chat
         
-        logger.info("RTCPeerConnection initialized with STUN server")
+        logger.info(f"RTCPeerConnection initialized with STUN servers: {self.stun_servers}")
     
     async def _on_connection_state_change(self) -> None:
         """Handle connection state changes."""
@@ -204,6 +211,12 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
                 elif data['type'] == 'heartbeat_response':
                     # Update last heartbeat response time
                     self.last_heartbeat_response = asyncio.get_event_loop().time()
+                elif data['type'] == 'voice_status':
+                    # Handle voice status updates
+                    self._handle_voice_status_message(data)
+                elif data['type'] == 'username_exchange':
+                    # Handle username exchange messages
+                    self._handle_username_exchange_message(data)
                 else:
                     # Handle file transfer control messages
                     self._handle_file_control_message(data)
@@ -425,9 +438,9 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
     
     @property
     def is_connected(self) -> bool:
-        """Check if the peer is connected."""
+        """Check if the peer is connected and data channel is open."""
         return (self.pc and 
-                self.pc.connectionState == "connected" and
+                self.pc.connectionState in ["connected", "connecting"] and
                 self.channel and 
                 self.channel.readyState == "open")
     
@@ -590,4 +603,104 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
     def set_heartbeat_config(self, interval: float = 1.0) -> None:
         """Configure heartbeat parameters to prevent inactivity disconnections."""
         self.heartbeat_interval = max(0.5, min(60.0, interval))  # Clamp between 0.5 and 60 seconds
-        logger.info(f"Heartbeat interval set to {self.heartbeat_interval} seconds") 
+        logger.info(f"Heartbeat interval set to {self.heartbeat_interval} seconds")
+    
+    def update_stun_servers(self, stun_servers: list) -> None:
+        """Update STUN server configuration with validation."""
+        try:
+            if not stun_servers:
+                logger.warning("No STUN servers provided, using default")
+                self.stun_servers = ["stun:stun.l.google.com:19302"]
+            else:
+                # Validate STUN servers
+                validated_servers = validate_stun_servers(stun_servers)
+                self.stun_servers = validated_servers
+            
+            logger.info(f"STUN servers updated: {self.stun_servers}")
+            
+            # If we have an active connection, we'll need to reconnect to use new STUN servers
+            # For now, just log that a restart may be needed
+            if self.pc and self.pc.connectionState in ["connected", "connecting"]:
+                logger.info("STUN server changes will take effect on next connection")
+                
+        except SecurityViolation as e:
+            logger.error(f"Invalid STUN servers: {e}")
+            # Keep existing servers on validation failure
+            logger.warning("Keeping existing STUN server configuration")
+            raise
+        except Exception as e:
+            logger.error(f"Error updating STUN servers: {e}")
+            raise
+    
+    def _handle_voice_status_message(self, data: dict) -> None:
+        """Handle voice status updates from peer."""
+        try:
+            voice_enabled = data.get('voice_enabled', False)
+            username = data.get('username', 'Peer')
+            
+            logger.info(f"Received voice status update: {username} voice_enabled={voice_enabled}")
+            
+            # Emit voice status change event for the application to handle
+            self.emit("peer_voice_status_changed", {
+                'username': username,
+                'voice_enabled': voice_enabled
+            })
+            
+        except Exception as e:
+            logger.error(f"Error handling voice status message: {e}")
+    
+    def send_voice_status_update(self, voice_enabled: bool, username: str = None) -> None:
+        """Send voice status update to peer."""
+        try:
+            if not self.channel or self.channel.readyState != "open":
+                logger.warning("Cannot send voice status: data channel not open")
+                return
+            
+            message = json.dumps({
+                "type": "voice_status",
+                "voice_enabled": voice_enabled,
+                "username": username or "Unknown"
+            })
+            
+            self.channel.send(message)
+            logger.debug(f"Sent voice status update: voice_enabled={voice_enabled}")
+            
+        except Exception as e:
+            logger.error(f"Error sending voice status update: {e}")
+    
+    def set_local_username(self, username: str) -> None:
+        """Set the local username for voice status updates."""
+        self.local_username = username
+        logger.debug(f"Local username set to: {username}")
+    
+    def _handle_username_exchange_message(self, data: dict) -> None:
+        """Handle username exchange messages from peer."""
+        try:
+            username = data.get('username', 'Peer')
+            logger.info(f"Received username exchange: {username}")
+            
+            # Emit username exchange event for the application to handle
+            self.emit("peer_username_received", {
+                'username': username
+            })
+            
+        except Exception as e:
+            logger.error(f"Error handling username exchange message: {e}")
+    
+    def send_username_exchange(self, username: str) -> None:
+        """Send username exchange message to peer."""
+        try:
+            if not self.channel or self.channel.readyState != "open":
+                logger.warning("Cannot send username exchange: data channel not open")
+                return
+            
+            message = json.dumps({
+                "type": "username_exchange",
+                "username": username
+            })
+            
+            self.channel.send(message)
+            logger.debug(f"Sent username exchange: {username}")
+            
+        except Exception as e:
+            logger.error(f"Error sending username exchange: {e}") 

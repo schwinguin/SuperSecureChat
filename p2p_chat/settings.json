@@ -1,0 +1,27 @@
+{
+  "audio": {
+    "input_device": null,
+    "input_device_name": "Default",
+    "output_device": null,
+    "output_device_name": "Default",
+    "sample_rate": 48000,
+    "channels": 1,
+    "frames_per_buffer": 1024
+  },
+  "gui": {
+    "theme": "dark",
+    "window_geometry": "900x700"
+  },
+  "connection": {
+    "max_reconnection_attempts": 5,
+    "initial_reconnection_delay": 2.0,
+    "max_reconnection_delay": 30.0,
+    "connection_timeout": 15.0,
+    "heartbeat_interval": 1.0,
+    "stun_servers": [
+      "stun:quadram.de"
+    ],
+    "custom_stun_server": "stun:quadram.de",
+    "use_custom_stun": 1
+  }
+}

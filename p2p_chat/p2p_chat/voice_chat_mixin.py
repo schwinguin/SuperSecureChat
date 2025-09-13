@@ -303,6 +303,10 @@ class VoiceChatMixin:
             self.voice_enabled = True
             logger.info("Voice chat enabled")
             
+            # Send voice status update to peer
+            if hasattr(self, 'send_voice_status_update'):
+                self.send_voice_status_update(True, self.local_username)
+            
             if self.on_voice_state_change:
                 await self.on_voice_state_change("enabled")
                 
@@ -329,6 +333,10 @@ class VoiceChatMixin:
             
             self.voice_enabled = False
             logger.info("Voice chat disabled")
+            
+            # Send voice status update to peer
+            if hasattr(self, 'send_voice_status_update'):
+                self.send_voice_status_update(False, self.local_username)
             
             if self.on_voice_state_change:
                 await self.on_voice_state_change("disabled")

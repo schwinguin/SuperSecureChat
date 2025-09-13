@@ -369,6 +369,14 @@ class AudioSettingsDialog:
     def _close_dialog(self):
         """Close the dialog."""
         if self.dialog:
-            self.dialog.grab_release()
-            self.dialog.destroy()
+            try:
+                self.dialog.grab_release()
+            except Exception:
+                # Ignore grab_release errors
+                pass
+            try:
+                self.dialog.destroy()
+            except Exception:
+                # Ignore destroy errors
+                pass
             self.dialog = None 

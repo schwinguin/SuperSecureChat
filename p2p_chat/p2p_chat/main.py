@@ -66,6 +66,10 @@ class P2PChatApp:
         audio_settings = self.settings_manager.get_audio_settings()
         self.window.set_audio_settings(audio_settings)
         
+        # Set connection settings from settings manager
+        connection_settings = self.settings_manager.get_connection_settings()
+        self.window.set_connection_settings(connection_settings)
+        
         # Set up window events
         self.window.on_create_chat = self._wrap_async_callback(self._on_create_chat)
         self.window.on_join_chat = self._wrap_async_callback_with_param(self._on_join_chat)
@@ -80,15 +84,19 @@ class P2PChatApp:
         # Voice chat events
         self.window.on_enable_voice = self._wrap_async_callback(self._on_enable_voice)
         self.window.on_disable_voice = self._wrap_async_callback(self._on_disable_voice)
-        self.window.on_start_voice_transmission = self._wrap_async_callback(self._on_start_voice_transmission)
-        self.window.on_stop_voice_transmission = self._wrap_async_callback(self._on_stop_voice_transmission)
+        # Removed separate transmission handlers - now using simple toggle
         self.window.on_audio_settings_changed = self._on_audio_settings_changed
+        self.window.on_connection_settings_changed = self._on_connection_settings_changed
         
         # Create WebRTC peer
         self.peer = RTCPeer()
         
         # Apply audio settings to peer
         self.peer.update_audio_settings(audio_settings)
+        
+        # Apply connection settings to peer (STUN servers)
+        stun_servers = connection_settings.get('stun_servers', ['stun:stun.l.google.com:19302'])
+        self.peer.update_stun_servers(stun_servers)
         
         self._setup_peer_events()
         
@@ -187,8 +195,12 @@ class P2PChatApp:
         
         # Voice chat events
         self.peer.on("voice_track_received", self._on_voice_track_received)
+        self.peer.on("peer_voice_status_changed", self._on_peer_voice_status_changed)
         if hasattr(self.peer, 'on_voice_state_change'):
             self.peer.on_voice_state_change = self._on_voice_state_change
+        
+        # Username exchange events
+        self.peer.on("peer_username_received", self._on_peer_username_received)
     
     async def _on_create_chat(self) -> None:
         """Handle create chat request from GUI."""
@@ -247,6 +259,10 @@ class P2PChatApp:
         try:
             # Get username from GUI
             username = self.window.get_username()
+            
+            # Update peer's local username for voice status updates
+            if self.peer:
+                self.peer.set_local_username(username)
             
             # Create message with username
             message_data = f"{username}|{message}"
@@ -489,7 +505,13 @@ class P2PChatApp:
                 # Parse message to extract username and content
                 if "|" in message:
                     peer_username, content = message.split("|", 1)
-                    self.peer_username = peer_username.strip() if peer_username.strip() else "Peer"
+                    new_peer_username = peer_username.strip() if peer_username.strip() else "Peer"
+                    
+                    # Update peer username and user list if it changed
+                    if new_peer_username != self.peer_username:
+                        self.peer_username = new_peer_username
+                        # Update the user in the participant list with the new username
+                        self.window.update_user_username("peer_001", self.peer_username)
                 else:
                     # Fallback for messages without username
                     content = message
@@ -583,6 +605,9 @@ class P2PChatApp:
             # For P2P, we add a generic "Peer" user since we don't have user identification yet
             peer_username = getattr(self, 'peer_username', 'Peer')
             self.window.add_user("peer_001", peer_username)
+            
+            # Send our username to the peer for immediate identification
+            self._send_username_exchange()
         
         self._safe_after(0, update_gui)
     
@@ -706,48 +731,49 @@ class P2PChatApp:
     # Voice Chat Event Handlers
     
     async def _on_enable_voice(self) -> None:
-        """Handle voice chat enable request from GUI."""
+        """Handle voice chat enable request from GUI - now starts transmission immediately."""
         try:
-            logger.info("Enabling voice chat...")
+            logger.info("Starting voice chat (enable + transmit)...")
+            
+            # Update peer's local username for voice status updates
+            username = self.window.get_username()
+            self.peer.set_local_username(username)
+            
+            # Enable voice chat
             await self.peer.enable_voice_chat()
             
-            # Update GUI status
-            self._safe_after(0, lambda: self.window.update_voice_status("Enabled"))
+            # Immediately start transmission (simple toggle behavior)
+            await self.peer.start_voice_transmission()
+            
+            # Voice status now shown via button text and color
             
         except Exception as e:
-            error_msg = f"Failed to enable voice chat: {e}"
+            error_msg = f"Failed to start voice chat: {e}"
             logger.error(error_msg)
             self._safe_after(0, lambda: self.window.show_error(error_msg))
             self._safe_after(0, lambda: self.window.set_voice_enabled(False))
     
     async def _on_disable_voice(self) -> None:
-        """Handle voice chat disable request from GUI."""
+        """Handle voice chat disable request from GUI - stops transmission and disables."""
         try:
-            logger.info("Disabling voice chat...")
+            logger.info("Stopping voice chat (stop transmit + disable)...")
+            
+            # Update peer's local username for voice status updates
+            username = self.window.get_username()
+            self.peer.set_local_username(username)
+            
+            # Stop transmission first, then disable
+            await self.peer.stop_voice_transmission()
             await self.peer.disable_voice_chat()
             
-            # Update GUI status
-            self._safe_after(0, lambda: self.window.update_voice_status("Disabled"))
+            # Voice status now shown via button text and color
             
         except Exception as e:
-            error_msg = f"Failed to disable voice chat: {e}"
+            error_msg = f"Failed to stop voice chat: {e}"
             logger.error(error_msg)
             self._safe_after(0, lambda: self.window.show_error(error_msg))
     
-    async def _on_start_voice_transmission(self) -> None:
-        """Handle start voice transmission request from GUI."""
-        try:
-            await self.peer.start_voice_transmission()
-        except Exception as e:
-            logger.error(f"Failed to start voice transmission: {e}")
-            self._safe_after(0, lambda: self.window.show_error(f"Voice transmission error: {e}"))
-    
-    async def _on_stop_voice_transmission(self) -> None:
-        """Handle stop voice transmission request from GUI."""
-        try:
-            await self.peer.stop_voice_transmission()
-        except Exception as e:
-            logger.error(f"Failed to stop voice transmission: {e}")
+    # Removed separate transmission handlers - now integrated into enable/disable
     
     def _on_voice_track_received(self, track) -> None:
         """Handle voice track received from peer."""
@@ -765,23 +791,60 @@ class P2PChatApp:
         def update_gui():
             if state == "enabled":
                 self.window.set_voice_enabled(True)
-                self.window.update_voice_status("Voice Chat: Enabled")
-                # Update peer voice status in user list
-                self.window.update_user_voice_status("peer_001", True)
             elif state == "disabled":
                 self.window.set_voice_enabled(False)
-                self.window.update_voice_status("Voice Chat: Disabled")
-                # Update peer voice status in user list
-                self.window.update_user_voice_status("peer_001", False)
             elif state == "transmitting":
-                self.window.update_voice_status("Voice Chat: Transmitting")
+                # Voice status now shown via button text and color
+                pass
             elif state == "listening":
-                self.window.update_voice_status("Voice Chat: Listening")
+                # Voice status now shown via button text and color
+                pass
             elif state == "error":
                 self.window.set_voice_enabled(False)
-                self.window.update_voice_status(f"Voice Chat: Error")
                 if error_msg:
                     self.window.show_error(f"Voice chat error: {error_msg}")
+        
+        self._safe_after(0, update_gui)
+    
+    def _on_peer_voice_status_changed(self, data: dict) -> None:
+        """Handle peer voice status changes."""
+        username = data.get('username', 'Peer')
+        voice_enabled = data.get('voice_enabled', False)
+        
+        logger.info(f"Peer voice status changed: {username} voice_enabled={voice_enabled}")
+        
+        def update_gui():
+            # Update peer username if it changed
+            if username != self.peer_username and username != 'Peer':
+                self.peer_username = username
+                # Update the user in the participant list with the new username
+                self.window.update_user_username("peer_001", self.peer_username)
+            
+            # Update the peer's voice status in the user list
+            # Use the consistent peer_001 ID that's used throughout the app
+            self.window.update_user_voice_status("peer_001", voice_enabled)
+            
+            # Show a message about the voice status change
+            status_msg = "enabled voice chat" if voice_enabled else "disabled voice chat"
+            self.window.add_message(f"🎤 {username} {status_msg}", "system")
+        
+        self._safe_after(0, update_gui)
+    
+    def _on_peer_username_received(self, data: dict) -> None:
+        """Handle peer username received from username exchange."""
+        username = data.get('username', 'Peer')
+        logger.info(f"Received peer username: {username}")
+        
+        def update_gui():
+            # Update the peer username
+            if username != self.peer_username and username != "Peer":
+                old_username = self.peer_username
+                self.peer_username = username
+                # Update the user in the participant list with the new username
+                self.window.update_user_username("peer_001", self.peer_username)
+                # Show a welcome message with the actual username (only if upgrading from "Peer")
+                if old_username == "Peer":
+                    self.window.add_message(f"👋 {username} joined the chat", "system")
         
         self._safe_after(0, update_gui)
     
@@ -795,6 +858,18 @@ class P2PChatApp:
         
         # Save settings to file
         self.settings_manager.update_audio_settings(settings)
+    
+    def _on_connection_settings_changed(self, settings: dict) -> None:
+        """Handle connection settings changed from GUI."""
+        logger.info(f"Connection settings changed: {settings}")
+        
+        # Update STUN servers in peer
+        if self.peer:
+            stun_servers = settings.get('stun_servers', ['stun:stun.l.google.com:19302'])
+            self.peer.update_stun_servers(stun_servers)
+        
+        # Save settings to file
+        self.settings_manager.update_connection_settings(settings)
 
     def _safe_after(self, delay, callback):
         """Safely schedule a callback, checking if cleanup has started."""
@@ -835,6 +910,16 @@ class P2PChatApp:
             error_msg = f"Error during disconnect: {e}"
             logger.error(error_msg)
             self._safe_after(0, lambda msg=error_msg: self.window.show_error(msg))
+    
+    def _send_username_exchange(self) -> None:
+        """Send username to peer for immediate identification."""
+        try:
+            if self.peer and self.peer.is_connected:
+                username = self.window.get_username()
+                self.peer.send_username_exchange(username)
+                logger.info(f"Sent username exchange: {username}")
+        except Exception as e:
+            logger.error(f"Failed to send username exchange: {e}")
 
 
 def main() -> None:

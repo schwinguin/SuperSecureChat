@@ -40,8 +40,9 @@ SuperSecureChat is a secure peer-to-peer chat application with voice communicati
 The application creates the following files in the same directory as the executable:
 
 - `settings.json` - Application settings (audio devices, GUI preferences)
-- `p2p_chat.log` - Application logs for debugging
 - `p2p_transfer_*` - Temporary files during file transfers (auto-cleaned)
+
+**Note:** For security reasons, the application does not create log files. All logging output goes to the console only.
 
 ### Audio Setup
 
@@ -148,12 +149,9 @@ ldd SuperSecureChat
 # Install missing system libraries if any
 ```
 
-### Log Analysis
+### Console Output Analysis
 
-Check the `p2p_chat.log` file for detailed error information:
-```bash
-tail -f p2p_chat.log
-```
+For security reasons, no log files are created. Check the console output for detailed error information when running the application from a terminal.
 
 ## Building from Source
 
