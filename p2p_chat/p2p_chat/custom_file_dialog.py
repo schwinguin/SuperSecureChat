@@ -38,9 +38,6 @@ class CustomFileDialog(ctk.CTkToplevel):
         self.lift()
         self.attributes("-topmost", True)
         
-        # Try to make modal after a delay, but don't fail if it doesn't work
-        self.after(100, self._make_modal)
-        
         # Current directory and file list
         self.current_dir = self.initialdir
         self.current_files = []
@@ -53,12 +50,6 @@ class CustomFileDialog(ctk.CTkToplevel):
         self.after(100, self._center_on_parent)
         self.after(200, self._ensure_visible)
     
-    def _make_modal(self):
-        """Make dialog modal after window is viewable."""
-        try:
-            self.grab_set()
-        except Exception as e:
-            logger.warning(f"Could not make dialog modal: {e}")
     
     def _ensure_visible(self):
         """Ensure dialog is visible and on top."""
@@ -472,17 +463,29 @@ class CustomFileDialog(ctk.CTkToplevel):
         if self.dialog_type == "open":
             if self.selected_file:
                 self.result = os.path.join(self.current_dir, self.selected_file)
-                self.destroy()
+                self._cleanup_and_destroy()
         else:  # save
             filename = self.filename_entry.get().strip()
             if filename:
                 self.result = os.path.join(self.current_dir, filename)
-                self.destroy()
+                self._cleanup_and_destroy()
     
     def _on_cancel(self):
         """Handle cancel button click."""
         self.result = None
+        self._cleanup_and_destroy()
+    
+    def _cleanup_and_destroy(self):
+        """Clean up dialog resources and destroy the window."""
+        try:
+            # Remove topmost attribute if set
+            self.attributes("-topmost", False)
+        except Exception as e:
+            logger.debug(f"Could not remove topmost attribute: {e}")
+        
+        # Destroy the window
         self.destroy()
+        logger.debug("Custom file dialog destroyed")
 
 
 def askopenfilename(parent=None, title="Select File", initialdir=None, 

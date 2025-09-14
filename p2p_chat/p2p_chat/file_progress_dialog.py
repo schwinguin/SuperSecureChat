@@ -23,12 +23,15 @@ class FileProgressDialog(ctk.CTkToplevel):
         self.geometry("450x250")
         self.resizable(False, False)
         
-        # Make dialog modal (delayed to avoid grab errors)
+        # Make dialog transient but not modal to avoid blocking
         self.transient(parent)
-        self.after(100, self._make_modal)
         
-        # Handle window close (X button) - allow closing progress dialog
+        # Keep dialog on top but don't make it modal
+        self.attributes("-topmost", True)
+        
+        # Handle window close (X button) and other close events
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        self.bind("<Escape>", lambda e: self._on_window_close())
         
         self._setup_ui()
         
@@ -36,19 +39,12 @@ class FileProgressDialog(ctk.CTkToplevel):
         self.after(100, self._center_on_parent)
         self.after(200, self._ensure_visible)
     
-    def _make_modal(self):
-        """Make the dialog modal after it's fully visible."""
-        try:
-            self.grab_set()
-        except Exception as e:
-            logger.warning(f"Could not make dialog modal: {e}")
     
     def _ensure_visible(self):
         """Ensure the dialog is visible and on top."""
         try:
             self.lift()
             self.focus_force()
-            self.attributes("-topmost", True)
         except Exception as e:
             logger.warning(f"Could not ensure dialog visibility: {e}")
         
@@ -147,7 +143,7 @@ class FileProgressDialog(ctk.CTkToplevel):
             transfer_id = self.transfer_info.get('transfer_id')
             if transfer_id:
                 self.on_cancel(transfer_id)
-        self.destroy()
+        self._cleanup_and_destroy()
     
     def _on_window_close(self):
         """Handle window close (X button) - cancel transfer and close dialog."""
@@ -156,4 +152,16 @@ class FileProgressDialog(ctk.CTkToplevel):
             transfer_id = self.transfer_info.get('transfer_id')
             if transfer_id:
                 self.on_cancel(transfer_id)
-        self.destroy() 
+        self._cleanup_and_destroy()
+    
+    def _cleanup_and_destroy(self):
+        """Clean up dialog resources and destroy the window."""
+        try:
+            # Remove topmost attribute if set
+            self.attributes("-topmost", False)
+        except Exception as e:
+            logger.debug(f"Could not remove topmost attribute: {e}")
+        
+        # Destroy the window
+        self.destroy()
+        logger.debug("File progress dialog destroyed") 

@@ -740,6 +740,9 @@ class ConnectionWizard:
         )
         self.join_entry.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 15))
         
+        # Configure text selection colors
+        self._configure_textbox_selection_colors(self.join_entry)
+        
         # Set up placeholder text
         self.join_entry_placeholder = "Paste the invite key here..."
         self._setup_placeholder_text(self.join_entry, self.join_entry_placeholder)
@@ -820,6 +823,9 @@ class ConnectionWizard:
         )
         self.invite_text.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 20))
         
+        # Configure text selection colors
+        self._configure_textbox_selection_colors(self.invite_text)
+        
         # Next step button
         self.next_step_btn = ctk.CTkButton(
             self.current_content,
@@ -882,6 +888,9 @@ class ConnectionWizard:
             corner_radius=8
         )
         self.return_entry.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 15))
+        
+        # Configure text selection colors
+        self._configure_textbox_selection_colors(self.return_entry)
         
         # Set up placeholder text
         self.return_entry_placeholder = "Paste the return key from your peer here..."
@@ -962,6 +971,9 @@ class ConnectionWizard:
             state="disabled"
         )
         self.return_display_text.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 20))
+        
+        # Configure text selection colors
+        self._configure_textbox_selection_colors(self.return_display_text)
         
         # Waiting message
         waiting_label = ctk.CTkLabel(
@@ -1262,6 +1274,23 @@ class ConnectionWizard:
         except Exception as e:
             logger.debug(f"Could not get textbox content: {e}")
             return ""
+    
+    def _configure_textbox_selection_colors(self, textbox: ctk.CTkTextbox) -> None:
+        """Configure text selection colors for a CTkTextbox to be less bright."""
+        try:
+            # Access the underlying Tkinter Text widget
+            text_widget = textbox._textbox
+            
+            # Configure selection colors
+            text_widget.configure(
+                selectbackground="#2E4A6B",  # Darker blue background
+                selectforeground="#FFFFFF"   # White text for good contrast
+            )
+            
+        except Exception as e:
+            # Silently fail - this is not critical functionality
+            # The text selection color configuration is a nice-to-have feature
+            pass
     
     def _add_tooltip(self, widget, text: str) -> None:
         """Add a tooltip to a widget that shows on hover with delay."""

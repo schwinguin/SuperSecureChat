@@ -765,6 +765,9 @@ class ModernChatWindow:
         )
         self.chat_display.grid(row=0, column=0, sticky="nsew")
         
+        # Configure text selection colors to be less bright
+        self._configure_text_selection_colors()
+        
         # User list sidebar
         user_list_frame = ctk.CTkFrame(panel, corner_radius=0, width=200)
         user_list_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 15), pady=15)
@@ -893,6 +896,38 @@ class ModernChatWindow:
         self.message_entry.focus()
         
         # Removed keyboard shortcuts - now using simple voice toggle
+    
+    def _configure_text_selection_colors(self) -> None:
+        """Configure text selection colors to be less bright and more comfortable."""
+        try:
+            # Access the underlying Tkinter Text widget
+            text_widget = self.chat_display._textbox
+            
+            # Configure selection colors for both dark and light themes
+            # Dark theme: darker blue background with white text
+            text_widget.configure(
+                selectbackground="#2E4A6B",  # Darker blue background
+                selectforeground="#FFFFFF"   # White text for good contrast
+            )
+            
+            # Note: CustomTkinter doesn't directly support theme-based selection colors
+            # This sets a fixed color that works well for both themes
+            logger.info("Text selection colors configured successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to configure text selection colors: {e}")
+            # Fallback: try alternative approach
+            try:
+                # Try accessing the widget differently
+                if hasattr(self.chat_display, 'textbox'):
+                    text_widget = self.chat_display.textbox
+                    text_widget.configure(
+                        selectbackground="#2E4A6B",
+                        selectforeground="#FFFFFF"
+                    )
+                    logger.info("Text selection colors configured using alternative method")
+            except Exception as e2:
+                logger.error(f"Alternative text selection configuration also failed: {e2}")
     
     def _on_send_file(self) -> None:
         """Handle send file button click."""
@@ -1194,6 +1229,9 @@ class ModernChatWindow:
             try:
                 # Enable editing temporarily
                 self.chat_display.configure(state="normal")
+                
+                # Configure text selection colors (in case chat display was recreated)
+                self._configure_text_selection_colors()
                 
                 # Configure text tags for different message types with brighter, more readable colors
                 self.chat_display.tag_config("sent", foreground="#4A90E2")      # Nice blue for your messages

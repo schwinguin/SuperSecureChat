@@ -27,12 +27,15 @@ class FileTransferDialog(ctk.CTkToplevel):
         self.geometry("500x350")
         self.resizable(False, False)
         
-        # Make dialog modal
+        # Make dialog transient but not modal to avoid blocking
         self.transient(parent)
-        self.grab_set()
         
-        # Handle window close (X button)
+        # Keep dialog on top but don't make it modal
+        self.attributes("-topmost", True)
+        
+        # Handle window close (X button) and other close events
         self.protocol("WM_DELETE_WINDOW", self._on_window_close)
+        self.bind("<Escape>", lambda e: self._on_window_close())
         
         # Debug logging
         filename = offer_data.get('filename', 'Unknown')
@@ -44,7 +47,8 @@ class FileTransferDialog(ctk.CTkToplevel):
         # Center on parent and bring to front
         self.after(100, self._center_on_parent)
         self.lift()
-        self.focus_force()
+        # Don't force focus to avoid stealing focus from main window
+    
     
     def _setup_ui(self):
         """Set up the dialog UI."""
@@ -121,8 +125,7 @@ class FileTransferDialog(ctk.CTkToplevel):
         )
         self.reject_btn.grid(row=0, column=1, padx=(10, 0), sticky="ew")
         
-        # Focus on accept button by default
-        self.accept_btn.focus()
+        # Don't focus on accept button by default to avoid stealing focus
         
         logger.info("File transfer dialog UI setup complete - buttons should be visible")
     
@@ -174,7 +177,7 @@ class FileTransferDialog(ctk.CTkToplevel):
             if save_path:
                 logger.info(f"User selected save path: {save_path}")
                 self.on_accept(self.offer_data['transfer_id'], save_path)
-                self.destroy()
+                self._cleanup_and_destroy()
             else:
                 logger.info("User cancelled file save dialog")
         except Exception as e:
@@ -185,10 +188,22 @@ class FileTransferDialog(ctk.CTkToplevel):
         """Handle reject button click."""
         logger.info("Reject button clicked")
         self.on_reject(self.offer_data['transfer_id'], "User declined")
-        self.destroy()
+        self._cleanup_and_destroy()
     
     def _on_window_close(self):
         """Handle window close (X button) - treat as rejection."""
         logger.info("File transfer dialog closed by user (X button) - treating as rejection")
         self.on_reject(self.offer_data['transfer_id'], "User closed dialog")
-        self.destroy() 
+        self._cleanup_and_destroy()
+    
+    def _cleanup_and_destroy(self):
+        """Clean up dialog resources and destroy the window."""
+        try:
+            # Remove topmost attribute if set
+            self.attributes("-topmost", False)
+        except Exception as e:
+            logger.debug(f"Could not remove topmost attribute: {e}")
+        
+        # Destroy the window
+        self.destroy()
+        logger.debug("File transfer dialog destroyed") 
