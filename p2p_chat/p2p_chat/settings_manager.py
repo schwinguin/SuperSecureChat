@@ -37,7 +37,7 @@ class SettingsManager:
             },
             "gui": {
                 "theme": "dark",
-                "window_geometry": "900x700"
+                "window_geometry": "1000x800"
             },
             "connection": {
                 "max_reconnection_attempts": 5,

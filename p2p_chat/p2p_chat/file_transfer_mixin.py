@@ -30,7 +30,9 @@ class FileTransferMixin:
         # File transfer management
         self.active_file_transfers: Dict[str, FileTransfer] = {}
         self.outgoing_file_transfer: Optional[FileTransfer] = None
-        self.file_chunk_size = 16384  # 16KB chunks
+        self.file_chunk_size = 32768  # 32KB chunks for better stability
+        self.file_offer_timeout = 300.0  # 5 minutes timeout for file offer acceptance
+        self.file_offer_timer: Optional[asyncio.Task] = None
     
     def _handle_file_control_message(self, data: Dict[str, Any]) -> None:
         """Handle file transfer control messages."""
@@ -43,6 +45,8 @@ class FileTransferMixin:
                 self._handle_file_accept(data)
             elif msg_type == 'file_reject':
                 self._handle_file_reject(data)
+            elif msg_type == 'file_timeout':
+                self._handle_file_timeout(data)
             elif msg_type == 'file_start':
                 self._handle_file_start(data)
             elif msg_type == 'file_end':
@@ -69,26 +73,37 @@ class FileTransferMixin:
                     # Write chunk to temporary file
                     try:
                         transfer.file_handle.write(data)
-                        # Periodically flush to disk to avoid losing data
-                        if transfer.bytes_received % (1024 * 1024) == 0:  # Every 1MB
+                        # Flush every 5MB to balance performance and data safety
+                        if transfer.bytes_received % (5 * 1024 * 1024) == 0:
                             transfer.file_handle.flush()
                     except Exception as e:
                         logger.error(f"Error writing chunk to file: {e}")
                         raise
                     
-                    # Emit progress update
-                    progress = (transfer.bytes_received / transfer.file_size) * 100
-                    self.emit("file_progress", {
-                        'transfer_id': transfer_id,
-                        'filename': transfer.filename,
-                        'bytes_received': transfer.bytes_received,
-                        'total_bytes': transfer.file_size,
-                        'progress': progress
-                    })
+                    # Emit progress update every 1MB to reduce overhead
+                    if transfer.bytes_received % (1024 * 1024) == 0:
+                        progress = (transfer.bytes_received / transfer.file_size) * 100
+                        self.emit("file_progress", {
+                            'transfer_id': transfer_id,
+                            'filename': transfer.filename,
+                            'bytes_received': transfer.bytes_received,
+                            'total_bytes': transfer.file_size,
+                            'progress': progress
+                        })
                     
                     # Check if transfer is complete
                     if transfer.bytes_received >= transfer.file_size:
                         logger.info(f"All chunks received for {transfer.filename}: {transfer.bytes_received}/{transfer.file_size} bytes")
+                        
+                        # Final progress update
+                        self.emit("file_progress", {
+                            'transfer_id': transfer_id,
+                            'filename': transfer.filename,
+                            'bytes_received': transfer.bytes_received,
+                            'total_bytes': transfer.file_size,
+                            'progress': 100.0
+                        })
+                        
                         self._complete_file_transfer(transfer_id)
                     
                     break
@@ -111,8 +126,12 @@ class FileTransferMixin:
             if not all([filename, file_size, checksum, transfer_id]):
                 raise ValueError("Invalid file offer data")
             
-            # Validate the file transfer
-            sanitized_filename = validate_file_transfer(filename, file_size)
+            # Enable file operation mode for aggressive heartbeat
+            if hasattr(self, 'peer') and hasattr(self.peer, 'enable_file_operation_mode'):
+                self.peer.enable_file_operation_mode()
+            
+            # Validate the file transfer (allow any file type and size)
+            sanitized_filename = validate_file_transfer(filename, file_size, allow_any_extension=True)
             
             # Create transfer object for tracking
             transfer = FileTransfer(sanitized_filename, file_size, checksum, transfer_id)
@@ -140,6 +159,12 @@ class FileTransferMixin:
         transfer_id = data.get('transfer_id')
         if transfer_id and self.outgoing_file_transfer and self.outgoing_file_transfer.transfer_id == transfer_id:
             logger.info(f"File transfer accepted: {transfer_id}")
+            
+            # Cancel timeout timer
+            if self.file_offer_timer:
+                self.file_offer_timer.cancel()
+                self.file_offer_timer = None
+            
             self.emit("file_accepted", {'transfer_id': transfer_id})
             # Start sending the file
             asyncio.create_task(self._send_file_chunks())
@@ -151,11 +176,17 @@ class FileTransferMixin:
         transfer_id = data.get('transfer_id')
         reason = data.get('reason', 'No reason provided')
         logger.info(f"File transfer rejected: {transfer_id}, reason: {reason}")
-        self.emit("file_rejected", {'transfer_id': transfer_id, 'reason': reason})
+        
+        # Cancel timeout timer
+        if self.file_offer_timer:
+            self.file_offer_timer.cancel()
+            self.file_offer_timer = None
         
         # Clean up outgoing transfer
         if self.outgoing_file_transfer and self.outgoing_file_transfer.transfer_id == transfer_id:
             self.outgoing_file_transfer = None
+        
+        self.emit("file_rejected", {'transfer_id': transfer_id, 'reason': reason})
     
     def _handle_file_start(self, data: Dict[str, Any]) -> None:
         """Handle file transfer start signal."""
@@ -289,30 +320,57 @@ class FileTransferMixin:
             # Open and send file in chunks
             with open(transfer.temp_path, 'rb') as f:
                 bytes_sent = 0
+                chunk_count = 0
+                
                 while True:
+                    # Check connection before each chunk
+                    if not self.channel or self.channel.readyState != "open":
+                        raise Exception("Data channel closed during transfer")
+                    
                     chunk = f.read(self.file_chunk_size)
                     if not chunk:
                         break
                     
-                    # Send binary chunk
-                    if self.channel and self.channel.readyState == "open":
+                    try:
+                        # Send binary chunk
                         self.channel.send(chunk)
                         bytes_sent += len(chunk)
+                        chunk_count += 1
                         
-                        # Emit progress
-                        progress = (bytes_sent / transfer.file_size) * 100
-                        self.emit("file_send_progress", {
-                            'transfer_id': transfer.transfer_id,
-                            'filename': transfer.filename,
-                            'bytes_sent': bytes_sent,
-                            'total_bytes': transfer.file_size,
-                            'progress': progress
-                        })
+                        # Emit progress every 10 chunks to reduce overhead
+                        if chunk_count % 10 == 0:
+                            progress = (bytes_sent / transfer.file_size) * 100
+                            self.emit("file_send_progress", {
+                                'transfer_id': transfer.transfer_id,
+                                'filename': transfer.filename,
+                                'bytes_sent': bytes_sent,
+                                'total_bytes': transfer.file_size,
+                                'progress': progress
+                            })
                         
-                        # Small delay to prevent overwhelming the channel
-                        await asyncio.sleep(0.01)
-                    else:
-                        raise Exception("Data channel not available")
+                        # Send keepalive every 25 chunks to prevent connection timeout
+                        if chunk_count % 25 == 0 and self.channel and self.channel.readyState == "open":
+                            try:
+                                keepalive_msg = json.dumps({
+                                    "type": "file_keepalive",
+                                    "transfer_id": transfer.transfer_id,
+                                    "timestamp": asyncio.get_event_loop().time()
+                                })
+                                self.channel.send(keepalive_msg)
+                            except Exception as e:
+                                logger.warning(f"Failed to send file keepalive: {e}")
+                        
+                        # Adaptive delay based on file size to prevent overwhelming
+                        if transfer.file_size > 100 * 1024 * 1024:  # > 100MB
+                            await asyncio.sleep(0.08)  # 80ms for large files
+                        elif transfer.file_size > 10 * 1024 * 1024:  # > 10MB
+                            await asyncio.sleep(0.06)  # 60ms for medium files
+                        else:
+                            await asyncio.sleep(0.04)  # 40ms for smaller files
+                        
+                    except Exception as e:
+                        logger.error(f"Error sending file chunk {chunk_count}: {e}")
+                        raise
             
             # Send completion signal
             self._send_file_control({
@@ -359,6 +417,11 @@ class FileTransferMixin:
         
         if self.outgoing_file_transfer:
             self.outgoing_file_transfer = None
+        
+        # Disable file operation mode if no active transfers
+        if not self.active_file_transfers and not self.outgoing_file_transfer:
+            if hasattr(self, 'peer') and hasattr(self.peer, 'disable_file_operation_mode'):
+                self.peer.disable_file_operation_mode()
     
     # Public file transfer methods
     
@@ -390,8 +453,12 @@ class FileTransferMixin:
             file_size = os.path.getsize(file_path)
             filename = os.path.basename(file_path)
             
-            # Security validation
-            sanitized_filename = validate_file_transfer(filename, file_size)
+            # Security validation (allow any file type and size)
+            sanitized_filename = validate_file_transfer(filename, file_size, allow_any_extension=True)
+            
+            # Enable file operation mode for aggressive heartbeat
+            if hasattr(self, 'peer') and hasattr(self.peer, 'enable_file_operation_mode'):
+                self.peer.enable_file_operation_mode()
             
             # Calculate checksum
             checksum = calculate_file_checksum(file_path)
@@ -413,6 +480,9 @@ class FileTransferMixin:
                 'checksum': checksum,
                 'transfer_id': transfer_id
             })
+            
+            # Start timeout timer for file offer acceptance
+            self._start_file_offer_timeout(transfer_id)
             
             logger.info(f"File transfer initiated: {sanitized_filename} ({file_size} bytes)")
             return transfer_id
@@ -496,4 +566,63 @@ class FileTransferMixin:
         if transfer_id in self.active_file_transfers:
             self._cleanup_file_transfer(transfer_id)
         if self.outgoing_file_transfer and self.outgoing_file_transfer.transfer_id == transfer_id:
-            self.outgoing_file_transfer = None 
+            self.outgoing_file_transfer = None
+    
+    def _start_file_offer_timeout(self, transfer_id: str) -> None:
+        """Start timeout timer for file offer acceptance."""
+        if self.file_offer_timer:
+            self.file_offer_timer.cancel()
+        
+        self.file_offer_timer = asyncio.create_task(self._file_offer_timeout_handler(transfer_id))
+    
+    async def _file_offer_timeout_handler(self, transfer_id: str) -> None:
+        """Handle file offer timeout."""
+        try:
+            await asyncio.sleep(self.file_offer_timeout)
+            
+            # Check if transfer is still pending
+            if (self.outgoing_file_transfer and 
+                self.outgoing_file_transfer.transfer_id == transfer_id):
+                
+                logger.warning(f"File offer timeout for transfer {transfer_id}")
+                
+                # Send timeout notification to peer
+                self._send_file_control({
+                    'type': 'file_timeout',
+                    'transfer_id': transfer_id,
+                    'reason': 'Receiver took too long to accept the file transfer'
+                })
+                
+                # Clean up outgoing transfer
+                self.outgoing_file_transfer = None
+                
+                # Emit timeout event
+                self.emit("file_timeout", {
+                    'transfer_id': transfer_id,
+                    'reason': 'File transfer offer timed out - receiver took too long to accept'
+                })
+                
+        except asyncio.CancelledError:
+            logger.debug("File offer timeout cancelled")
+        except Exception as e:
+            logger.error(f"Error in file offer timeout handler: {e}")
+    
+    def _handle_file_timeout(self, data: Dict[str, Any]) -> None:
+        """Handle file transfer timeout notification."""
+        transfer_id = data.get('transfer_id')
+        reason = data.get('reason', 'Unknown timeout')
+        
+        logger.info(f"File transfer timeout received: {transfer_id}, reason: {reason}")
+        
+        # Clean up any active transfers for this ID
+        if transfer_id in self.active_file_transfers:
+            transfer = self.active_file_transfers[transfer_id]
+            if transfer.file_handle:
+                transfer.file_handle.close()
+            del self.active_file_transfers[transfer_id]
+        
+        # Emit timeout event
+        self.emit("file_timeout", {
+            'transfer_id': transfer_id,
+            'reason': reason
+        }) 

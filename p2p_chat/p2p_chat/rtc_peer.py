@@ -56,7 +56,8 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
         self.max_reconnection_delay: float = 30.0  # Max 30 seconds
         self.reconnection_task: Optional[asyncio.Task] = None
         self.connection_timeout: float = 15.0  # Timeout for connection establishment
-        self.heartbeat_interval: float = 1.0  # Send heartbeat every 1 second to prevent ICE consent timeout
+        self.heartbeat_interval: float = 0.2  # Send heartbeat every 0.2 seconds to prevent ICE consent timeout
+        self.file_operation_mode: bool = False  # Special mode for file transfers
         self.heartbeat_task: Optional[asyncio.Task] = None
         self.last_heartbeat_response: float = 0.0
         
@@ -70,7 +71,7 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
         # Create RTCIceServer objects from configured STUN servers
         ice_servers = [RTCIceServer(urls=self.stun_servers)]
         
-        # Create RTCConfiguration object
+        # Create RTCConfiguration object with supported settings
         config = RTCConfiguration(iceServers=ice_servers)
         
         self.pc = RTCPeerConnection(configuration=config)
@@ -211,6 +212,30 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
                 elif data['type'] == 'heartbeat_response':
                     # Update last heartbeat response time
                     self.last_heartbeat_response = asyncio.get_event_loop().time()
+                elif data['type'] == 'keepalive':
+                    # Respond to keepalive with heartbeat response
+                    response = json.dumps({
+                        "type": "heartbeat_response",
+                        "timestamp": asyncio.get_event_loop().time()
+                    })
+                    if self.channel and self.channel.readyState == "open":
+                        try:
+                            self.channel.send(response)
+                            self.last_heartbeat_response = asyncio.get_event_loop().time()
+                        except Exception as e:
+                            logger.error(f"Failed to send keepalive response: {e}")
+                elif data['type'] == 'file_keepalive':
+                    # Respond to file transfer keepalive
+                    response = json.dumps({
+                        "type": "heartbeat_response",
+                        "timestamp": asyncio.get_event_loop().time()
+                    })
+                    if self.channel and self.channel.readyState == "open":
+                        try:
+                            self.channel.send(response)
+                            self.last_heartbeat_response = asyncio.get_event_loop().time()
+                        except Exception as e:
+                            logger.error(f"Failed to send file keepalive response: {e}")
                 elif data['type'] == 'voice_status':
                     # Handle voice status updates
                     self._handle_voice_status_message(data)
@@ -566,8 +591,13 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
     async def _heartbeat_loop(self) -> None:
         """Heartbeat loop to monitor connection health."""
         try:
-            while self.is_connected:
-                await asyncio.sleep(self.heartbeat_interval)
+            consecutive_failures = 0
+            max_failures = 5
+            
+            while self.is_connected and self.pc and self.pc.connectionState in ["connected", "connecting"]:
+                # Use different intervals based on file operation mode
+                sleep_interval = 0.1 if self.file_operation_mode else self.heartbeat_interval
+                await asyncio.sleep(sleep_interval)
                 
                 # Send heartbeat message
                 if self.channel and self.channel.readyState == "open":
@@ -577,23 +607,48 @@ class RTCPeer(AsyncIOEventEmitter, FileTransferMixin, VoiceChatMixin):
                     })
                     try:
                         self.channel.send(heartbeat_msg)
+                        consecutive_failures = 0  # Reset on successful send
                         
                         # Check if we've received a response recently
                         current_time = asyncio.get_event_loop().time()
-                        if (current_time - self.last_heartbeat_response) > (self.heartbeat_interval * 10):
+                        timeout_multiplier = 3 if self.file_operation_mode else 6
+                        if (current_time - self.last_heartbeat_response) > (self.heartbeat_interval * timeout_multiplier):
                             logger.warning("Heartbeat response timeout - connection may be unstable")
-                            # Don't trigger reconnection here, let WebRTC state changes handle it
+                            # Send a more aggressive keepalive
+                            try:
+                                keepalive_msg = json.dumps({
+                                    "type": "keepalive",
+                                    "timestamp": current_time
+                                })
+                                self.channel.send(keepalive_msg)
+                            except Exception as ke:
+                                logger.error(f"Failed to send keepalive: {ke}")
                             
                     except Exception as e:
-                        logger.error(f"Failed to send heartbeat: {e}")
-                        break
+                        consecutive_failures += 1
+                        logger.error(f"Failed to send heartbeat (attempt {consecutive_failures}): {e}")
+                        
+                        if consecutive_failures >= max_failures:
+                            logger.error("Too many consecutive heartbeat failures - connection may be lost")
+                            break
                 else:
+                    logger.warning("Data channel not available for heartbeat")
                     break
                     
         except asyncio.CancelledError:
             logger.debug("Heartbeat loop cancelled")
         except Exception as e:
             logger.error(f"Heartbeat loop error: {e}")
+    
+    def enable_file_operation_mode(self) -> None:
+        """Enable aggressive heartbeat mode for file operations."""
+        self.file_operation_mode = True
+        logger.info("File operation mode enabled - using aggressive heartbeat")
+    
+    def disable_file_operation_mode(self) -> None:
+        """Disable aggressive heartbeat mode."""
+        self.file_operation_mode = False
+        logger.info("File operation mode disabled - using normal heartbeat")
     
     async def _stop_reconnection(self) -> None:
         """Stop any ongoing reconnection attempts."""

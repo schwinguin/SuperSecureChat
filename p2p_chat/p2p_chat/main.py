@@ -599,6 +599,7 @@ class P2PChatApp:
             self.window.show_chat()
             self.window.add_message("=== Connected to peer ===", "system")
             self.window.add_message("🔒 Your communication is end-to-end encrypted!", "system")
+            self.window.add_message("⚠️ Chats are not saved and will be automatically lost when you leave or close the app", "system")
             self.window.set_status("Ready to chat", "green")
             
             # Initialize user list with both local user and peer
@@ -1038,7 +1039,7 @@ class P2PChatApp:
 
 def main() -> None:
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="P2P Secure Chat Application")
+    parser = argparse.ArgumentParser(description="SuperSecureChat Application")
     parser.add_argument(
         "--debug", 
         action="store_true", 

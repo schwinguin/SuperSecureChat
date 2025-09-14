@@ -13,24 +13,44 @@ logger = logging.getLogger(__name__)
 class FileProgressDialog(ctk.CTkToplevel):
     """Dialog for showing file transfer progress."""
     
-    def __init__(self, parent, transfer_info: Dict[str, Any]):
+    def __init__(self, parent, transfer_info: Dict[str, Any], on_cancel: callable = None):
         super().__init__(parent)
         
         self.transfer_info = transfer_info
+        self.on_cancel = on_cancel
         
         self.title("File Transfer Progress")
         self.geometry("450x250")
         self.resizable(False, False)
         
-        # Make dialog modal
+        # Make dialog modal (delayed to avoid grab errors)
         self.transient(parent)
-        self.grab_set()
+        self.after(100, self._make_modal)
+        
+        # Handle window close (X button) - allow closing progress dialog
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
         
         self._setup_ui()
         
-        # Center on parent
+        # Center on parent and ensure visibility
         self.after(100, self._center_on_parent)
-        self.lift()
+        self.after(200, self._ensure_visible)
+    
+    def _make_modal(self):
+        """Make the dialog modal after it's fully visible."""
+        try:
+            self.grab_set()
+        except Exception as e:
+            logger.warning(f"Could not make dialog modal: {e}")
+    
+    def _ensure_visible(self):
+        """Ensure the dialog is visible and on top."""
+        try:
+            self.lift()
+            self.focus_force()
+            self.attributes("-topmost", True)
+        except Exception as e:
+            logger.warning(f"Could not ensure dialog visibility: {e}")
         
     def _setup_ui(self):
         """Set up the progress dialog UI."""
@@ -122,5 +142,18 @@ class FileProgressDialog(ctk.CTkToplevel):
     
     def _on_cancel_click(self):
         """Handle cancel button click."""
-        # TODO: Implement transfer cancellation
+        logger.info("Cancel button clicked - cancelling file transfer")
+        if self.on_cancel:
+            transfer_id = self.transfer_info.get('transfer_id')
+            if transfer_id:
+                self.on_cancel(transfer_id)
+        self.destroy()
+    
+    def _on_window_close(self):
+        """Handle window close (X button) - cancel transfer and close dialog."""
+        logger.info("File progress dialog closed by user (X button) - cancelling transfer")
+        if self.on_cancel:
+            transfer_id = self.transfer_info.get('transfer_id')
+            if transfer_id:
+                self.on_cancel(transfer_id)
         self.destroy() 

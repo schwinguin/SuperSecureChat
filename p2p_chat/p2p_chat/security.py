@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 MAX_MESSAGE_LENGTH = 8192
 # Maximum number of lines in a message
 MAX_MESSAGE_LINES = 100
-# Maximum file size for transfers (100MB)
-MAX_FILE_SIZE = 100 * 1024 * 1024
+# No file size limit - allow any size
+MAX_FILE_SIZE = None  # No limit
 # Maximum filename length
 MAX_FILENAME_LENGTH = 255
 # Pattern for potentially dangerous characters
@@ -150,19 +150,20 @@ def validate_file_transfer(filename: str, file_size: int, allow_any_extension: b
     if file_size <= 0:
         raise FileSecurityViolation("File size must be positive")
     
-    if file_size > MAX_FILE_SIZE:
-        size_mb = file_size / (1024 * 1024)
-        max_mb = MAX_FILE_SIZE / (1024 * 1024)
-        raise FileSecurityViolation(f"File too large ({size_mb:.1f}MB). Maximum allowed: {max_mb:.0f}MB")
+    # No file size limit - allow any size
+    # if file_size > MAX_FILE_SIZE:
+    #     size_mb = file_size / (1024 * 1024)
+    #     max_mb = MAX_FILE_SIZE / (1024 * 1024)
+    #     raise FileSecurityViolation(f"File too large ({size_mb:.1f}MB). Maximum allowed: {max_mb:.0f}MB")
     
     # Sanitize filename
     sanitized_filename = sanitize_filename(filename)
     
-    # Check file extension if not allowing any extension
-    if not allow_any_extension:
-        file_ext = os.path.splitext(sanitized_filename)[1].lower()
-        if file_ext and file_ext not in ALLOWED_FILE_EXTENSIONS:
-            raise FileSecurityViolation(f"File type '{file_ext}' is not allowed")
+    # Allow any file extension - no restrictions
+    # if not allow_any_extension:
+    #     file_ext = os.path.splitext(sanitized_filename)[1].lower()
+    #     if file_ext and file_ext not in ALLOWED_FILE_EXTENSIONS:
+    #         raise FileSecurityViolation(f"File type '{file_ext}' is not allowed")
     
     logger.info(f"File validation passed: {sanitized_filename} ({file_size} bytes)")
     return sanitized_filename

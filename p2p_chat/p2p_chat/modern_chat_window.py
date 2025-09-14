@@ -5,6 +5,7 @@ Main UI class that provides the modern interface with dark/light theme support.
 
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
+from .custom_file_dialog import askopenfilename, asksaveasfilename
 import logging
 import os
 import shutil
@@ -30,12 +31,18 @@ class ModernChatWindow:
     
     def __init__(self, root: ctk.CTk):
         self.root = root
-        self.root.title("🔒 P2P Secure Chat")
-        self.root.geometry("900x700")
-        self.root.minsize(700, 500)
+        self.root.title("🔒 SuperSecureChat")
+        # Set a large enough window size to accommodate all wizard steps without resizing
+        self.root.geometry("1000x800")
+        self.root.minsize(800, 600)
         
         # Configure window
         self.root.iconbitmap("")  # You can add an icon file here
+        
+        # Fullscreen support
+        self.is_fullscreen = False
+        self.root.bind("<F11>", self._toggle_fullscreen)
+        self.root.bind("<Escape>", self._exit_fullscreen)
         
         # Callbacks - to be set by main.py
         self.on_create_chat: Optional[Callable] = None
@@ -68,6 +75,9 @@ class ModernChatWindow:
         self.return_key = ""
         self.stored_username = "Anonymous"
         
+        # Store original geometry for fullscreen toggle
+        self.original_geometry = None
+        
         # Voice chat state
         self.voice_enabled = False
         self.voice_transmitting = False
@@ -98,24 +108,23 @@ class ModernChatWindow:
         self.panel_frame.grid_columnconfigure(0, weight=1)
         self.panel_frame.grid_rowconfigure(1, weight=1)
         
-        # Title and burger menu frame
+        # Title and burger menu frame - single column for true centering
         title_frame = ctk.CTkFrame(self.panel_frame, fg_color="transparent")
-        title_frame.grid(row=0, column=0, sticky="ew", pady=(20, 10))
-        title_frame.grid_columnconfigure(0, weight=1)  # Center column
-        title_frame.grid_columnconfigure(1, weight=0)  # Fixed width for button
+        title_frame.grid(row=0, column=0, sticky="ew", pady=(20, 0))
+        title_frame.grid_columnconfigure(0, weight=1)  # Single column takes full width
         
-        # Simple title - centered
+        # Title - truly centered in the frame
         title_label = ctk.CTkLabel(
             title_frame,
-            text="🔒 P2P Secure Chat",
+            text="🔒 SuperSecureChat",
             font=ctk.CTkFont(size=28, weight="bold"),
             text_color=("gray10", "gray90")
         )
         title_label.grid(row=0, column=0, sticky="")
         
-        # Burger menu button
+        # Burger menu button - positioned absolutely in top right
         self.burger_menu_button = ctk.CTkButton(
-            title_frame,
+            self.panel_frame,  # Position relative to panel_frame, not title_frame
             text="☰",
             width=40,
             height=40,
@@ -125,7 +134,8 @@ class ModernChatWindow:
             fg_color=("gray70", "gray30"),
             hover_color=("gray60", "gray40")
         )
-        self.burger_menu_button.grid(row=0, column=1, sticky="e", padx=(10, 20))
+        # Position absolutely in top right corner
+        self.burger_menu_button.place(relx=1.0, rely=0.0, x=-60, y=10, anchor="ne")
         
         # Burger menu dropdown (initially hidden) - use toplevel window
         self.burger_menu_window = None
@@ -146,9 +156,20 @@ class ModernChatWindow:
             status_frame,
             text="Ready",
             font=ctk.CTkFont(size=12),
-            text_color=("gray50", "gray50")
+            text_color=("gray50", "gray50"),
+            anchor="w"  # Left align text
         )
-        self.status_label.grid(row=0, column=0, pady=8)
+        self.status_label.grid(row=0, column=0, sticky="ew", pady=8, padx=10)
+        
+        # Bind window resize event to handle status label updates
+        self.root.bind("<Configure>", self._on_window_resize)
+    
+    def _on_window_resize(self, event):
+        """Handle window resize events to prevent status label scrambling."""
+        # Only handle resize events for the main window, not child widgets
+        if event.widget == self.root:
+            # Force status label to update its layout
+            self.status_label.update_idletasks()
     
     def _toggle_burger_menu(self):
         """Toggle the burger menu dropdown."""
@@ -381,7 +402,7 @@ class ModernChatWindow:
         # Direct welcome section without wrapper frame
         welcome_label = ctk.CTkLabel(
             panel,
-            text="Welcome to Secure P2P Chat",
+            text="Welcome to SuperSecureChat",
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
@@ -389,7 +410,7 @@ class ModernChatWindow:
         
         subtitle_label = ctk.CTkLabel(
             panel,
-            text="End-to-end encrypted • Direct peer connection • No servers",
+            text="End-to-end encrypted • Direct peer connection • No servers • Chats not saved",
             font=ctk.CTkFont(size=14),
             text_color=("gray40", "gray60")
         )
@@ -877,40 +898,39 @@ class ModernChatWindow:
         """Handle send file button click."""
         try:
             # Open file dialog
-            file_path = filedialog.askopenfilename(
-                title="Select File to Send",
-                filetypes=[
-                    ("All Files", "*.*"),
-                    ("Text Files", "*.txt"),
-                    ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.svg *.webp"),
-                    ("Documents", "*.pdf *.doc *.docx *.rtf *.odt"),
-                    ("Audio", "*.mp3 *.wav *.ogg *.flac *.aac *.m4a"),
-                    ("Video", "*.mp4 *.avi *.mkv *.webm *.mov *.flv"),
-                    ("Archives", "*.zip *.rar *.7z *.tar *.gz *.bz2"),
-                    ("Code", "*.py *.js *.html *.css *.json *.xml *.csv")
-                ]
-            )
+            try:
+                file_path = askopenfilename(
+                    parent=self.root,
+                    title="Select File to Send (Any file type and size allowed)",
+                    filetypes=[
+                        ("All Files", "*.*")
+                    ]
+                )
+            except Exception as e:
+                logger.error(f"Error in file selection: {e}")
+                # Fallback to system file dialog
+                try:
+                    file_path = filedialog.askopenfilename(
+                        title="Select File to Send (Any file type and size allowed)",
+                        filetypes=[("All Files", "*.*")]
+                    )
+                except Exception as e2:
+                    logger.error(f"System file dialog also failed: {e2}")
+                    messagebox.showerror("Error", f"Could not open file dialog: {e}")
+                    return
             
             if file_path and self.on_send_file:
-                # Check file size before sending
+                # Get file info for confirmation
                 file_size = os.path.getsize(file_path)
-                max_size = 100 * 1024 * 1024  # 100MB
-                
-                if file_size > max_size:
-                    messagebox.showerror(
-                        "File Too Large", 
-                        f"File size ({file_size / (1024*1024):.1f} MB) exceeds the maximum limit of 100 MB."
-                    )
-                    return
-                
-                # Show confirmation
                 filename = os.path.basename(file_path)
                 size_mb = file_size / (1024 * 1024)
                 
+                # Show confirmation (no size limit)
                 if messagebox.askyesno(
                     "Send File", 
                     f"Send file '{filename}' ({size_mb:.2f} MB)?\n\n"
-                    f"The file will be encrypted and sent securely over the P2P connection."
+                    f"The file will be encrypted and sent securely over the P2P connection.\n"
+                    f"No file size or type restrictions apply."
                 ):
                     self.on_send_file(file_path)
                     
@@ -958,24 +978,23 @@ class ModernChatWindow:
         self.panel_frame.grid_columnconfigure(0, weight=1)
         self.panel_frame.grid_rowconfigure(1, weight=1)
         
-        # Recreate title and burger menu frame
+        # Recreate title and burger menu frame - single column for true centering
         title_frame = ctk.CTkFrame(self.panel_frame, fg_color="transparent")
-        title_frame.grid(row=0, column=0, sticky="ew", pady=(20, 10))
-        title_frame.grid_columnconfigure(0, weight=1)  # Center column
-        title_frame.grid_columnconfigure(1, weight=0)  # Fixed width for button
+        title_frame.grid(row=0, column=0, sticky="ew", pady=(20, 0))
+        title_frame.grid_columnconfigure(0, weight=1)  # Single column takes full width
         
-        # Recreate title - centered
+        # Recreate title - truly centered in the frame
         title_label = ctk.CTkLabel(
             title_frame,
-            text="🔒 P2P Secure Chat",
+            text="🔒 SuperSecureChat",
             font=ctk.CTkFont(size=28, weight="bold"),
             text_color=("gray10", "gray90")
         )
         title_label.grid(row=0, column=0, sticky="")
         
-        # Recreate burger menu button
+        # Recreate burger menu button - positioned absolutely in top right
         self.burger_menu_button = ctk.CTkButton(
-            title_frame,
+            self.panel_frame,  # Position relative to panel_frame, not title_frame
             text="☰",
             width=40,
             height=40,
@@ -985,7 +1004,8 @@ class ModernChatWindow:
             fg_color=("gray70", "gray30"),
             hover_color=("gray60", "gray40")
         )
-        self.burger_menu_button.grid(row=0, column=1, sticky="e", padx=(10, 20))
+        # Position absolutely in top right corner
+        self.burger_menu_button.place(relx=1.0, rely=0.0, x=-60, y=10, anchor="ne")
         
         # Recreate burger menu dropdown (initially hidden) - use frame
         self.burger_menu_frame = None
@@ -1201,13 +1221,18 @@ class ModernChatWindow:
             print(f"💬 {message}")
     
     def set_status(self, status: str, color: str = "gray") -> None:
-        """Update the status display."""
+        """Update the status display with proper text handling."""
         status_colors = {
             "green": ("gray30", "gray60"),      # Gray shades instead of colored status
             "red": ("gray40", "gray50"),        # Gray shades instead of red
             "orange": ("gray35", "gray55"),     # Gray shades instead of orange
             "gray": ("gray50", "gray50")
         }
+        
+        # Truncate status text if it's too long to prevent scrambling
+        max_length = 80  # Reasonable limit for status text
+        if len(status) > max_length:
+            status = status[:max_length-3] + "..."
         
         color_tuple = status_colors.get(color, status_colors["gray"])
         self.status_label.configure(text=status, text_color=color_tuple)
@@ -1348,7 +1373,8 @@ class ModernChatWindow:
             
             if result:
                 # Ask for save location
-                save_path = filedialog.asksaveasfilename(
+                save_path = asksaveasfilename(
+                    parent=self.root,
                     title="Save File As",
                     initialfile=filename,
                     filetypes=[("All Files", "*.*")]
@@ -1374,7 +1400,7 @@ class ModernChatWindow:
             transfer_id = transfer_info.get('transfer_id')
             
             if transfer_id not in self.active_progress_dialogs:
-                dialog = FileProgressDialog(self.root, transfer_info)
+                dialog = FileProgressDialog(self.root, transfer_info, self._on_cancel_file_transfer)
                 self.active_progress_dialogs[transfer_id] = dialog
         except Exception as e:
             logger.error(f"Error showing file progress dialog: {e}")
@@ -1403,6 +1429,27 @@ class ModernChatWindow:
                 del self.active_progress_dialogs[transfer_id]
             except Exception as e:
                 logger.warning(f"Error removing progress dialog: {e}")
+    
+    def _on_cancel_file_transfer(self, transfer_id: str) -> None:
+        """Handle file transfer cancellation."""
+        try:
+            logger.info(f"Cancelling file transfer: {transfer_id}")
+            
+            # Remove progress dialog
+            if transfer_id in self.active_progress_dialogs:
+                dialog = self.active_progress_dialogs[transfer_id]
+                dialog.destroy()
+                del self.active_progress_dialogs[transfer_id]
+            
+            # Cancel the transfer in the peer
+            if hasattr(self, 'peer') and self.peer:
+                self.peer.cancel_file_transfer(transfer_id)
+            
+            # Show cancellation message
+            self.add_message("❌ File transfer cancelled", "system")
+            
+        except Exception as e:
+            logger.error(f"Error cancelling file transfer: {e}")
     
     def show_file_completed(self, completion_data: Dict[str, Any]) -> None:
         """Show file transfer completion notification and move file to final location."""
@@ -1437,9 +1484,9 @@ class ModernChatWindow:
                     logger.info(f"File {filename} saved successfully to {save_path}")
                 else:
                     # Fallback: ask user where to save (shouldn't happen with new implementation)
-                    save_path = filedialog.asksaveasfilename(
+                    save_path = asksaveasfilename(
+                        parent=self.root,
                         title="Save Received File",
-                        defaultextension=os.path.splitext(filename)[1],
                         initialfile=filename,
                         filetypes=[
                             ("All Files", "*.*"),
@@ -1591,7 +1638,78 @@ class ModernChatWindow:
                 
                 logger.info("Wizard state reset to initial state")
         except Exception as e:
-            logger.error(f"Error resetting wizard state: {e}") 
+            logger.error(f"Error resetting wizard state: {e}")
+    
+    def _toggle_fullscreen(self, event=None) -> None:
+        """Toggle fullscreen mode."""
+        self.is_fullscreen = not self.is_fullscreen
+        if self.is_fullscreen:
+            # Store current geometry before going fullscreen
+            self.original_geometry = self.root.geometry()
+            # Go fullscreen
+            self.root.attributes('-fullscreen', True)
+            # Adjust layout for fullscreen
+            self._adjust_layout_for_fullscreen()
+        else:
+            # Exit fullscreen
+            self.root.attributes('-fullscreen', False)
+            # Restore original geometry
+            if self.original_geometry:
+                self.root.geometry(self.original_geometry)
+            # Restore normal layout
+            self._adjust_layout_for_normal()
+    
+    def _exit_fullscreen(self, event=None) -> None:
+        """Exit fullscreen mode."""
+        if self.is_fullscreen:
+            self._toggle_fullscreen()
+    
+    def _adjust_layout_for_fullscreen(self) -> None:
+        """Adjust layout for fullscreen viewing."""
+        # Increase padding and spacing for fullscreen
+        if hasattr(self, 'main_frame'):
+            self.main_frame.grid_configure(padx=50, pady=50)
+        
+        # Adjust wizard layout for fullscreen
+        if hasattr(self, 'connection_wizard') and self.connection_wizard:
+            self._adjust_wizard_for_fullscreen()
+    
+    def _adjust_layout_for_normal(self) -> None:
+        """Restore normal layout after exiting fullscreen."""
+        # Restore normal padding
+        if hasattr(self, 'main_frame'):
+            self.main_frame.grid_configure(padx=20, pady=20)
+        
+        # Restore wizard layout
+        if hasattr(self, 'connection_wizard') and self.connection_wizard:
+            self._adjust_wizard_for_normal()
+    
+    def _adjust_wizard_for_fullscreen(self) -> None:
+        """Adjust wizard layout for fullscreen viewing."""
+        if not hasattr(self, 'connection_wizard') or not self.connection_wizard:
+            return
+        
+        # Increase content frame padding for fullscreen
+        if hasattr(self.connection_wizard, 'content_frame'):
+            self.connection_wizard.content_frame.grid_configure(padx=50, pady=50)
+        
+        # Increase header padding
+        if hasattr(self.connection_wizard, 'progress_frame'):
+            self.connection_wizard.progress_frame.grid_configure(padx=50)
+    
+    def _adjust_wizard_for_normal(self) -> None:
+        """Restore wizard layout for normal viewing."""
+        if not hasattr(self, 'connection_wizard') or not self.connection_wizard:
+            return
+        
+        # Restore normal content frame padding
+        if hasattr(self.connection_wizard, 'content_frame'):
+            self.connection_wizard.content_frame.grid_configure(padx=20, pady=20)
+        
+        # Restore normal header padding
+        if hasattr(self.connection_wizard, 'progress_frame'):
+            self.connection_wizard.progress_frame.grid_configure(padx=20)
+    
     # Placeholder text handling methods
     
     def _setup_placeholder_text(self, textbox: ctk.CTkTextbox, placeholder: str) -> None:

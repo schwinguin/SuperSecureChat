@@ -52,13 +52,14 @@ class ConnectionSettingsDialog:
         """Create the dialog window."""
         self.dialog = ctk.CTkToplevel(self.parent)
         self.dialog.title("🌐 Connection Settings")
-        self.dialog.geometry("650x600")
         self.dialog.resizable(False, False)
         
         # Make dialog modal - but do it after the window is visible
         self.dialog.transient(self.parent)
         
-        # Center the dialog
+        # Calculate centered position first, then set geometry once
+        # Use withdraw to prevent flickering during positioning
+        self.dialog.withdraw()
         self.dialog.update_idletasks()
         x = (self.dialog.winfo_screenwidth() // 2) - (650 // 2)
         y = (self.dialog.winfo_screenheight() // 2) - (600 // 2)
@@ -67,6 +68,9 @@ class ConnectionSettingsDialog:
         # Configure grid
         self.dialog.grid_columnconfigure(0, weight=1)
         self.dialog.grid_rowconfigure(0, weight=1)
+        
+        # Show the dialog after positioning is complete
+        self.dialog.deiconify()
         
         # Set grab after the dialog is fully created and positioned
         self.dialog.after(100, self._set_modal)

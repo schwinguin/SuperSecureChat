@@ -4,7 +4,8 @@ Handles file transfer offer dialogs with modern UI.
 """
 
 import customtkinter as ctk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox
+from .custom_file_dialog import asksaveasfilename
 import logging
 import os
 from typing import Callable, Dict, Any
@@ -29,6 +30,9 @@ class FileTransferDialog(ctk.CTkToplevel):
         # Make dialog modal
         self.transient(parent)
         self.grab_set()
+        
+        # Handle window close (X button)
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
         
         # Debug logging
         filename = offer_data.get('filename', 'Unknown')
@@ -96,8 +100,8 @@ class FileTransferDialog(ctk.CTkToplevel):
             width=140,
             height=45,
             font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color=("gray50", "gray30"),
-            hover_color=("gray60", "gray20"),
+            fg_color=("green", "darkgreen"),
+            hover_color=("lightgreen", "green"),
             corner_radius=8,
             command=self._on_accept_click
         )
@@ -110,15 +114,15 @@ class FileTransferDialog(ctk.CTkToplevel):
             width=140,
             height=45,
             font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color=("gray40", "gray40"),
-            hover_color=("gray50", "gray30"),
+            fg_color=("red", "darkred"),
+            hover_color=("lightcoral", "red"),
             corner_radius=8,
             command=self._on_reject_click
         )
         self.reject_btn.grid(row=0, column=1, padx=(10, 0), sticky="ew")
         
-        # Focus on reject button by default (safer)
-        self.reject_btn.focus()
+        # Focus on accept button by default
+        self.accept_btn.focus()
         
         logger.info("File transfer dialog UI setup complete - buttons should be visible")
     
@@ -153,11 +157,11 @@ class FileTransferDialog(ctk.CTkToplevel):
             filename = self.offer_data.get('filename', 'download')
             initial_dir = os.path.expanduser("~/Downloads")
             
-            save_path = filedialog.asksaveasfilename(
+            save_path = asksaveasfilename(
+                parent=self,
                 title="Save File As",
                 initialdir=initial_dir,
                 initialfile=filename,
-                defaultextension=os.path.splitext(filename)[1] if '.' in filename else '',
                 filetypes=[
                     ("All Files", "*.*"),
                     ("Text Files", "*.txt"),
@@ -181,4 +185,10 @@ class FileTransferDialog(ctk.CTkToplevel):
         """Handle reject button click."""
         logger.info("Reject button clicked")
         self.on_reject(self.offer_data['transfer_id'], "User declined")
+        self.destroy()
+    
+    def _on_window_close(self):
+        """Handle window close (X button) - treat as rejection."""
+        logger.info("File transfer dialog closed by user (X button) - treating as rejection")
+        self.on_reject(self.offer_data['transfer_id'], "User closed dialog")
         self.destroy() 

@@ -40,7 +40,6 @@ class ConnectionWizard:
     
     def __init__(self, parent: ctk.CTk):
         self.parent = parent
-        self.wizard_frame: Optional[ctk.CTkFrame] = None
         self.current_step = WizardStep.WELCOME
         self.step_history = []
         
@@ -54,6 +53,7 @@ class ConnectionWizard:
         self.content_frame: Optional[ctk.CTkFrame] = None
         self.navigation_frame: Optional[ctk.CTkFrame] = None
         self.progress_frame: Optional[ctk.CTkFrame] = None
+        self.wizard_frame: Optional[ctk.CTk] = None  # Can be CTk or CTkFrame
         self.step_indicators = []
         
         # Callbacks
@@ -77,44 +77,43 @@ class ConnectionWizard:
         # Use the parent directly instead of creating a nested frame
         self.wizard_frame = self.parent
         # Configure the parent frame for wizard layout
-        self.wizard_frame.grid_columnconfigure(0, weight=1)
-        self.wizard_frame.grid_rowconfigure(2, weight=1)  # Content area
+        if self.wizard_frame:
+            self.wizard_frame.grid_columnconfigure(0, weight=1)
+        # Don't give weight to content area - let it expand naturally
+        # self.wizard_frame.grid_rowconfigure(2, weight=1)  # Content area
         
     def _setup_ui(self) -> None:
         """Set up the wizard UI structure."""
         # Header with title and progress
         self._setup_header()
         
-        # Content area - create a separate frame for wizard content
-        self.content_frame = ctk.CTkFrame(self.wizard_frame, corner_radius=0, fg_color="transparent")
-        self.content_frame.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
-        self.content_frame.grid_columnconfigure(0, weight=1)
-        self.content_frame.grid_rowconfigure(0, weight=1)
+        # Content area - use wizard frame directly for content
+        # Note: content_frame is used as a reference to wizard_frame for content placement
+        if self.wizard_frame:
+            self.wizard_frame.grid_columnconfigure(0, weight=1)
         
         # Navigation area
         self._setup_navigation()
     
     def _setup_header(self) -> None:
-        """Set up the wizard header with title and progress indicators."""
-        # Title
-        title_label = ctk.CTkLabel(
-            self.wizard_frame,
-            text="🔒 P2P Secure Chat - Connection Wizard",
-            font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=("gray10", "gray90")
-        )
-        title_label.grid(row=0, column=0, pady=(10, 8), padx=20)
-        
-        # Progress indicators
+        """Set up the wizard header with progress indicators only."""
+        # Progress indicators - positioned much closer to top
         self.progress_frame = ctk.CTkFrame(self.wizard_frame, fg_color="transparent")
-        self.progress_frame.grid(row=1, column=0, pady=(0, 8), padx=20)
+        self.progress_frame.grid(row=0, column=0, pady=(2, 0), padx=20, sticky="ew")
+        self.progress_frame.grid_columnconfigure(0, weight=1)  # Center the steps container
+        
+        # Create a dynamic-width container for the steps - compact height
+        self.steps_container = ctk.CTkFrame(self.progress_frame, fg_color="transparent", height=55)
+        self.steps_container.grid(row=0, column=0, sticky="n")  # Align to top
+        self.steps_container.grid_propagate(False)
+        # Initial configuration will be set by _update_progress_indicators()
         
         self._update_progress_indicators()
     
     def _setup_navigation(self) -> None:
         """Set up the navigation buttons."""
         self.navigation_frame = ctk.CTkFrame(self.wizard_frame, fg_color="transparent")
-        self.navigation_frame.grid(row=3, column=0, sticky="ew", padx=20, pady=(5, 10))
+        self.navigation_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=(5, 10))
         self.navigation_frame.grid_columnconfigure(0, weight=1)
         self.navigation_frame.grid_columnconfigure(1, weight=0)
         
@@ -148,91 +147,272 @@ class ConnectionWizard:
         self.next_btn.grid(row=0, column=1, sticky="e", padx=(0, 10))
     
     def _update_progress_indicators(self) -> None:
-        """Update the progress step indicators."""
-        # Clear existing indicators
-        for indicator in self.step_indicators:
-            indicator.destroy()
-        self.step_indicators.clear()
+        """Update the progress step indicators with stable positioning - no flickering."""
+        # Define all possible steps in order (maximum 7 steps)
+        all_steps = [
+            ("1", WizardStep.WELCOME),
+            ("2", WizardStep.USERNAME),
+            ("3", WizardStep.CONNECTION_TYPE),
+            ("4", WizardStep.CREATE_CHAT),
+            ("5", WizardStep.JOIN_CHAT),
+            ("6", WizardStep.SHARE_INVITE),
+            ("7", WizardStep.SHARE_RETURN),
+            ("8", WizardStep.WAIT_FOR_RETURN),
+            ("9", WizardStep.WAITING_CONNECTION)
+        ]
         
-        # Define steps and their positions
+        # Determine which steps should be visible based on connection type
         if self.connection_type == "create":
-            steps = [
-                ("Welcome", WizardStep.WELCOME),
-                ("Username", WizardStep.USERNAME),
-                ("Type", WizardStep.CONNECTION_TYPE),
-                ("Create", WizardStep.CREATE_CHAT),
-                ("Share", WizardStep.SHARE_INVITE),
-                ("Wait", WizardStep.WAIT_FOR_RETURN),
-                ("Connect", WizardStep.WAITING_CONNECTION)
+            visible_step_enums = [
+                WizardStep.WELCOME,
+                WizardStep.USERNAME,
+                WizardStep.CONNECTION_TYPE,
+                WizardStep.CREATE_CHAT,
+                WizardStep.SHARE_INVITE,
+                WizardStep.WAIT_FOR_RETURN,
+                WizardStep.WAITING_CONNECTION
             ]
         elif self.connection_type == "join":
-            steps = [
-                ("Welcome", WizardStep.WELCOME),
-                ("Username", WizardStep.USERNAME),
-                ("Type", WizardStep.CONNECTION_TYPE),
-                ("Join", WizardStep.JOIN_CHAT),
-                ("Share", WizardStep.SHARE_RETURN),
-                ("Connect", WizardStep.WAITING_CONNECTION)
+            visible_step_enums = [
+                WizardStep.WELCOME,
+                WizardStep.USERNAME,
+                WizardStep.CONNECTION_TYPE,
+                WizardStep.JOIN_CHAT,
+                WizardStep.SHARE_RETURN,
+                WizardStep.WAITING_CONNECTION
             ]
         else:
-            steps = [
-                ("Welcome", WizardStep.WELCOME),
-                ("Username", WizardStep.USERNAME),
-                ("Type", WizardStep.CONNECTION_TYPE)
+            visible_step_enums = [
+                WizardStep.WELCOME,
+                WizardStep.USERNAME,
+                WizardStep.CONNECTION_TYPE
             ]
         
-        # Create step indicators
-        for i, (step_name, step_enum) in enumerate(steps):
-            # Skip connection step if not yet determined
-            if step_enum in [WizardStep.CREATE_CHAT, WizardStep.JOIN_CHAT] and not self.connection_type:
-                continue
+        # Create indicators if they don't exist (only once)
+        if not self.step_indicators:
+            # Create all possible indicators (9 max) but hide them initially
+            for i, (number, step_enum) in enumerate(all_steps):
+                step_frame = ctk.CTkFrame(
+                    self.steps_container,
+                    width=38,
+                    height=38,
+                    corner_radius=19,
+                    fg_color=("gray60", "gray40")
+                )
+                step_frame.grid(row=0, column=i, padx=8, pady=3, sticky="")
+                step_frame.grid_propagate(False)
+                step_frame.grid_remove()  # Hide by default
                 
-            # Determine if this step is current, completed, or pending
-            if step_enum == self.current_step:
-                color = ("#4A90E2", "#4A90E2")  # Blue for current
-                text_color = ("white", "white")
-            elif self._is_step_completed(step_enum):
-                color = ("#5CB85C", "#5CB85C")  # Green for completed
-                text_color = ("white", "white")
-            else:
-                color = ("gray70", "gray30")  # Gray for pending
-                text_color = ("gray50", "gray50")
+                # Make first 3 steps bigger initially
+                initial_font_size = 22 if number in ["1", "2", "3"] else 18
+                step_label = ctk.CTkLabel(
+                    step_frame,
+                    text=number,
+                    font=ctk.CTkFont(size=initial_font_size, weight="bold"),
+                    text_color=("gray30", "gray70"),
+                    fg_color="transparent"
+                )
+                step_label.place(relx=0.5, rely=0.5, anchor="center")
+                self.step_indicators.append(step_frame)
+        
+        # Calculate container width based on visible steps
+        step_width = 60
+        container_width = len(visible_step_enums) * step_width
+        container_width = max(container_width, 200)
+        self.steps_container.configure(width=container_width)
+        
+        # Clear all column configurations
+        for i in range(9):  # Clear all 9 columns
+            self.steps_container.grid_columnconfigure(i, weight=0)
+        
+        # Show/hide and configure visible indicators
+        visible_count = 0
+        for i, (number, step_enum) in enumerate(all_steps):
+            if i < len(self.step_indicators):
+                step_frame = self.step_indicators[i]
+                
+                if step_enum in visible_step_enums:
+                    # Show this step
+                    step_frame.grid()
+                    self.steps_container.grid_columnconfigure(visible_count, weight=1)
+                    
+                    # Determine if this step is current or completed
+                    is_current = self.current_step == step_enum
+                    is_completed = self._is_step_completed(step_enum)
+                    
+                    # Set color based on status
+                    if is_current:
+                        fg_color = ("#4A90E2", "#4A90E2")  # Blue
+                        text_color = ("white", "white")
+                    elif is_completed:
+                        fg_color = ("#5CB85C", "#5CB85C")  # Green
+                        text_color = ("white", "white")
+                    else:
+                        fg_color = ("gray60", "gray40")  # Grey
+                        text_color = ("gray30", "gray70")
+                    
+                    # Update frame properties
+                    if is_current:
+                        step_frame.configure(
+                            width=48,
+                            height=48,
+                            corner_radius=24,
+                            fg_color=fg_color
+                        )
+                        step_frame.grid_configure(padx=6, pady=3)
+                    else:
+                        step_frame.configure(
+                            width=38,
+                            height=38,
+                            corner_radius=19,
+                            fg_color=fg_color
+                        )
+                        step_frame.grid_configure(padx=8, pady=3)
+                    
+                    # Update label properties
+                    # Make first 3 steps bigger (steps 1, 2, 3)
+                    if number in ["1", "2", "3"]:
+                        font_size = 26 if is_current else 22
+                    else:
+                        font_size = 22 if is_current else 18
+                    step_label = step_frame.winfo_children()[0]
+                    step_label.configure(
+                        text=number,
+                        font=ctk.CTkFont(size=font_size, weight="bold"),
+                        text_color=text_color
+                    )
+                    
+                    visible_count += 1
+                else:
+                    # Hide this step
+                    step_frame.grid_remove()
+    
+    def _resize_window_to_content(self) -> None:
+        """
+        Resize the window to fit the content height.
+        
+        NOTE: This method is currently disabled to prevent constant window resizing
+        during wizard navigation. The main window is now set to a fixed large size
+        (1000x800) that accommodates all wizard steps without needing resizing.
+        """
+        if not self.current_content:
+            return
+        
+        # Get the actual root window (not the frame)
+        root_window = self.parent.winfo_toplevel()
+        
+        # Update the window to calculate the required size
+        root_window.update_idletasks()
+        
+        # Get the current window size
+        current_width = root_window.winfo_width()
+        current_height = root_window.winfo_height()
+        
+        # Calculate the required height by measuring the entire wizard frame
+        wizard_height = self.wizard_frame.winfo_reqheight() if self.wizard_frame else 0
+        
+        # Add extra padding for window decorations, borders, and safety margin
+        # Increased padding to ensure title and all elements are visible
+        window_padding = 250  # Extra padding for window title bar, borders, etc.
+        
+        required_height = wizard_height + window_padding
+        
+        # Set minimum height - increased to ensure title is always visible
+        min_height = 600
+        new_height = max(required_height, min_height)
+        
+        # Debug information
+        print(f"Debug - Wizard height: {wizard_height}, Required: {required_height}, New: {new_height}, Current: {current_height}")
+        
+        # Only resize if the height has changed significantly and not in fullscreen
+        if abs(new_height - current_height) > 50:  # Increased threshold to prevent constant resizing
+            try:
+                # Check if window is in fullscreen mode
+                if not root_window.attributes('-fullscreen'):
+                    root_window.geometry(f"{current_width}x{new_height}")
+                else:
+                    # In fullscreen, just ensure content is properly centered
+                    self._center_content_in_fullscreen()
+            except Exception as e:
+                # If resizing fails, just log it and continue
+                print(f"Window resize failed: {e}")
+    
+    def _center_content_in_fullscreen(self) -> None:
+        """Center content when in fullscreen mode."""
+        try:
+            # Get the root window
+            root_window = self.parent.winfo_toplevel()
             
-            # Create step indicator
-            step_frame = ctk.CTkFrame(self.progress_frame, corner_radius=0, fg_color=color)
-            step_frame.grid(row=0, column=i, padx=5)
+            # Get screen dimensions
+            screen_width = root_window.winfo_screenwidth()
+            screen_height = root_window.winfo_screenheight()
             
-            step_label = ctk.CTkLabel(
-                step_frame,
-                text=step_name,
-                font=ctk.CTkFont(size=12, weight="bold"),
-                text_color=text_color
-            )
-            step_label.grid(row=0, column=0, padx=15, pady=8)
+            # Calculate wizard content dimensions
+            if self.wizard_frame:
+                wizard_width = self.wizard_frame.winfo_reqwidth()
+                wizard_height = self.wizard_frame.winfo_reqheight()
+                
+                # Center the wizard frame
+                x_offset = (screen_width - wizard_width) // 2
+                y_offset = (screen_height - wizard_height) // 2
+                
+                # Apply centering by adjusting grid configuration
+                # Only apply grid_configure if it's a frame, not the main window
+                try:
+                    # Use getattr to avoid type checker issues
+                    grid_configure = getattr(self.wizard_frame, 'grid_configure', None)
+                    if grid_configure:
+                        grid_configure(padx=x_offset//2, pady=y_offset//2)
+                except Exception:
+                    # CTk doesn't have grid_configure, skip centering
+                    pass
             
-            self.step_indicators.append(step_frame)
+        except Exception as e:
+            print(f"Error centering content in fullscreen: {e}")
     
     def _is_step_completed(self, step: WizardStep) -> bool:
         """Check if a step has been completed."""
-        if step == WizardStep.WELCOME:
-            return self.current_step != WizardStep.WELCOME
-        elif step == WizardStep.USERNAME:
-            return self.username != "Anonymous" or self.current_step in [WizardStep.CONNECTION_TYPE, WizardStep.CREATE_CHAT, WizardStep.SHARE_INVITE, WizardStep.WAIT_FOR_RETURN, WizardStep.JOIN_CHAT, WizardStep.SHARE_RETURN, WizardStep.WAITING_CONNECTION]
-        elif step == WizardStep.CONNECTION_TYPE:
-            return self.connection_type is not None
-        elif step == WizardStep.CREATE_CHAT:
-            return self.current_step in [WizardStep.SHARE_INVITE, WizardStep.WAIT_FOR_RETURN, WizardStep.WAITING_CONNECTION]
-        elif step == WizardStep.SHARE_INVITE:
-            return self.current_step in [WizardStep.WAIT_FOR_RETURN, WizardStep.WAITING_CONNECTION]
-        elif step == WizardStep.WAIT_FOR_RETURN:
-            return self.current_step == WizardStep.WAITING_CONNECTION
-        elif step == WizardStep.JOIN_CHAT:
-            return self.current_step in [WizardStep.SHARE_RETURN, WizardStep.WAITING_CONNECTION]
-        elif step == WizardStep.SHARE_RETURN:
-            return self.current_step == WizardStep.WAITING_CONNECTION
-        elif step == WizardStep.WAITING_CONNECTION:
-            return False  # This step is never "completed" as it's the final step
-        return False
+        # Define the step order for each flow
+        if self.connection_type == "create":
+            step_order = [
+                WizardStep.WELCOME,
+                WizardStep.USERNAME, 
+                WizardStep.CONNECTION_TYPE,
+                WizardStep.CREATE_CHAT,
+                WizardStep.SHARE_INVITE,
+                WizardStep.WAIT_FOR_RETURN,
+                WizardStep.WAITING_CONNECTION
+            ]
+        elif self.connection_type == "join":
+            step_order = [
+                WizardStep.WELCOME,
+                WizardStep.USERNAME,
+                WizardStep.CONNECTION_TYPE, 
+                WizardStep.JOIN_CHAT,
+                WizardStep.SHARE_RETURN,
+                WizardStep.WAITING_CONNECTION
+            ]
+        else:
+            step_order = [
+                WizardStep.WELCOME,
+                WizardStep.USERNAME,
+                WizardStep.CONNECTION_TYPE
+            ]
+        
+        # Find the current step index
+        try:
+            current_index = step_order.index(self.current_step)
+        except ValueError:
+            current_index = 0
+        
+        # Find the step index we're checking
+        try:
+            step_index = step_order.index(step)
+        except ValueError:
+            return False
+        
+        # A step is completed if it comes before the current step
+        return step_index < current_index
     
     def _show_step(self, step: WizardStep) -> None:
         """Show a specific wizard step."""
@@ -270,21 +450,25 @@ class ConnectionWizard:
         # Update navigation
         self._update_navigation()
         self._update_progress_indicators()
+        
+        # Disabled automatic resizing to prevent constant window resizing
+        # The window is now set to a fixed large size that accommodates all wizard steps
+        # self.parent.after(100, self._resize_window_to_content)
     
     def _show_welcome_step(self) -> None:
-        """Show the welcome step."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        """Show the welcome step with simplified design."""
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Welcome content
         welcome_label = ctk.CTkLabel(
             self.current_content,
-            text="Welcome to P2P Secure Chat!",
+            text="👋 Welcome to SuperSecureChat!",
             font=ctk.CTkFont(size=24, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        welcome_label.grid(row=0, column=0, pady=(20, 10))
+        welcome_label.grid(row=0, column=0, pady=(10, 10))
         
         # Features list
         features_text = ctk.CTkLabel(
@@ -293,10 +477,11 @@ class ConnectionWizard:
                  "🌐 Direct peer-to-peer connection\n"
                  "📁 Secure file transfers\n"
                  "🎤 Real-time voice chat\n"
-                 "🚫 No servers - complete privacy",
+                 "🚫 No servers - complete privacy\n"
+                 "⚠️ Chats not saved - automatically lost on disconnect",
             font=ctk.CTkFont(size=14),
             text_color=("gray40", "gray60"),
-            justify="left"
+            justify="center"
         )
         features_text.grid(row=1, column=0, pady=(0, 15))
         
@@ -312,9 +497,9 @@ class ConnectionWizard:
         instructions_label.grid(row=2, column=0, pady=(0, 20))
     
     def _show_username_step(self) -> None:
-        """Show the username entry step."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        """Show the username entry step with simplified design."""
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Title
@@ -324,7 +509,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(20, 10))
+        title_label.grid(row=0, column=0, pady=(0, 15))
         
         # Instructions
         instructions_label = ctk.CTkLabel(
@@ -335,7 +520,7 @@ class ConnectionWizard:
             text_color=("gray40", "gray60"),
             justify="center"
         )
-        instructions_label.grid(row=1, column=0, pady=(0, 15))
+        instructions_label.grid(row=1, column=0, pady=(0, 20))
         
         # Username entry
         self.username_entry = ctk.CTkEntry(
@@ -346,7 +531,7 @@ class ConnectionWizard:
             corner_radius=8,
             width=400
         )
-        self.username_entry.grid(row=2, column=0, pady=(0, 10))
+        self.username_entry.grid(row=2, column=0, pady=(0, 15))
         
         # Set current username if available
         if self.username != "Anonymous":
@@ -359,13 +544,13 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=11),
             text_color=("gray50", "gray50")
         )
-        note_label.grid(row=3, column=0, pady=(0, 20))
+        note_label.grid(row=3, column=0, pady=(0, 30))
     
     
     def _show_connection_type_step(self) -> None:
-        """Show the connection type selection step."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        """Show the connection type selection step with simplified design."""
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         self.current_content.grid_columnconfigure(1, weight=1)
         
@@ -376,11 +561,11 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, columnspan=2, pady=(20, 15))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         # Create chat option
         create_frame = ctk.CTkFrame(self.current_content, corner_radius=0)
-        create_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+        create_frame.grid(row=1, column=0, sticky="nsew", padx=(0, 10), pady=0)
         create_frame.grid_columnconfigure(0, weight=1)
         
         create_icon = ctk.CTkLabel(
@@ -388,7 +573,7 @@ class ConnectionWizard:
             text="🚀",
             font=ctk.CTkFont(size=36)
         )
-        create_icon.grid(row=0, column=0, pady=(15, 5))
+        create_icon.grid(row=0, column=0, pady=(20, 10))
         
         create_title = ctk.CTkLabel(
             create_frame,
@@ -396,7 +581,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        create_title.grid(row=1, column=0, pady=(0, 5))
+        create_title.grid(row=1, column=0, pady=(0, 10))
         
         create_desc = ctk.CTkLabel(
             create_frame,
@@ -405,7 +590,7 @@ class ConnectionWizard:
             text_color=("gray40", "gray60"),
             justify="center"
         )
-        create_desc.grid(row=2, column=0, pady=(0, 10))
+        create_desc.grid(row=2, column=0, pady=(0, 15))
         
         self.create_btn = ctk.CTkButton(
             create_frame,
@@ -418,11 +603,11 @@ class ConnectionWizard:
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20")
         )
-        self.create_btn.grid(row=3, column=0, pady=(0, 15))
+        self.create_btn.grid(row=3, column=0, pady=(0, 20))
         
         # Join chat option
         join_frame = ctk.CTkFrame(self.current_content, corner_radius=0)
-        join_frame.grid(row=1, column=1, sticky="nsew", padx=10, pady=5)
+        join_frame.grid(row=1, column=1, sticky="nsew", padx=(10, 0), pady=0)
         join_frame.grid_columnconfigure(0, weight=1)
         
         join_icon = ctk.CTkLabel(
@@ -430,7 +615,7 @@ class ConnectionWizard:
             text="🔗",
             font=ctk.CTkFont(size=36)
         )
-        join_icon.grid(row=0, column=0, pady=(15, 5))
+        join_icon.grid(row=0, column=0, pady=(20, 10))
         
         join_title = ctk.CTkLabel(
             join_frame,
@@ -438,7 +623,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        join_title.grid(row=1, column=0, pady=(0, 5))
+        join_title.grid(row=1, column=0, pady=(0, 10))
         
         join_desc = ctk.CTkLabel(
             join_frame,
@@ -447,7 +632,7 @@ class ConnectionWizard:
             text_color=("gray40", "gray60"),
             justify="center"
         )
-        join_desc.grid(row=2, column=0, pady=(0, 10))
+        join_desc.grid(row=2, column=0, pady=(0, 15))
         
         self.join_btn = ctk.CTkButton(
             join_frame,
@@ -460,12 +645,12 @@ class ConnectionWizard:
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20")
         )
-        self.join_btn.grid(row=3, column=0, pady=(0, 15))
+        self.join_btn.grid(row=3, column=0, pady=(0, 20))
     
     def _show_create_chat_step(self) -> None:
         """Show the create chat step - just shows that chat is being created."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Title
@@ -475,7 +660,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(20, 10))
+        title_label.grid(row=0, column=0, pady=(0, 15))
         
         # Instructions
         instructions_label = ctk.CTkLabel(
@@ -486,16 +671,16 @@ class ConnectionWizard:
             text_color=("gray40", "gray60"),
             justify="center"
         )
-        instructions_label.grid(row=1, column=0, pady=(0, 15))
+        instructions_label.grid(row=1, column=0, pady=(0, 20))
         
         # Progress indicator
         self.progress_bar = ctk.CTkProgressBar(
             self.current_content,
             width=300,
             height=20,
-            corner_radius=0
+            corner_radius=8
         )
-        self.progress_bar.grid(row=2, column=0, pady=(0, 15))
+        self.progress_bar.grid(row=2, column=0, pady=(0, 20))
         self.progress_bar.set(0.5)  # Indeterminate progress
         
         # Continue button (will be shown when invite key is ready)
@@ -510,12 +695,12 @@ class ConnectionWizard:
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20")
         )
-        self.continue_btn.grid(row=3, column=0, pady=(0, 20))
+        self.continue_btn.grid(row=3, column=0, pady=(0, 30))
     
     def _show_join_chat_step(self) -> None:
         """Show the join chat step."""
-        self.current_content = ctk.CTkScrollableFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Title
@@ -525,7 +710,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(15, 5))
+        title_label.grid(row=0, column=0, pady=(0, 15))
         
         # Instructions
         instructions_label = ctk.CTkLabel(
@@ -534,9 +719,9 @@ class ConnectionWizard:
                  "You'll then receive a return key to share back with them.",
             font=ctk.CTkFont(size=12),
             text_color=("gray40", "gray60"),
-            justify="left"
+            justify="center"
         )
-        instructions_label.grid(row=1, column=0, pady=(0, 10))
+        instructions_label.grid(row=1, column=0, pady=(0, 20))
         
         # Invite key input section
         invite_label = ctk.CTkLabel(
@@ -545,15 +730,15 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=("gray30", "gray70")
         )
-        invite_label.grid(row=2, column=0, pady=(10, 5))
+        invite_label.grid(row=2, column=0, pady=(15, 10))
         
         self.join_entry = ctk.CTkTextbox(
             self.current_content,
             height=100,
             font=ctk.CTkFont(size=12, family="monospace"),
-            corner_radius=0
+            corner_radius=8
         )
-        self.join_entry.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 5))
+        self.join_entry.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 15))
         
         # Set up placeholder text
         self.join_entry_placeholder = "Paste the invite key here..."
@@ -571,46 +756,12 @@ class ConnectionWizard:
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20")
         )
-        self.join_submit_btn.grid(row=4, column=0, pady=(0, 10))
-        
-        # Return key display section (initially hidden)
-        self.return_display_frame = ctk.CTkFrame(self.current_content, corner_radius=0)
-        self.return_display_frame.grid_columnconfigure(0, weight=1)
-        
-        return_display_label = ctk.CTkLabel(
-            self.return_display_frame,
-            text="📤 Your Return Key (Share This Back)",
-            font=ctk.CTkFont(size=16, weight="bold"),
-            text_color=("gray30", "gray70")
-        )
-        return_display_label.grid(row=0, column=0, pady=(10, 5))
-        
-        self.return_display_text = ctk.CTkTextbox(
-            self.return_display_frame,
-            height=100,
-            font=ctk.CTkFont(size=12, family="monospace"),
-            corner_radius=8,
-            state="disabled"
-        )
-        self.return_display_text.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 5))
-        
-        self.copy_return_btn = ctk.CTkButton(
-            self.return_display_frame,
-            text="📋 Copy Return Key",
-            width=160,
-            height=35,
-            font=ctk.CTkFont(size=14),
-            corner_radius=8,
-            command=self._copy_return_key,
-            fg_color=("gray45", "gray35"),
-            hover_color=("gray55", "gray25")
-        )
-        self.copy_return_btn.grid(row=2, column=0, pady=(0, 10))
+        self.join_submit_btn.grid(row=4, column=0, pady=(0, 20))
     
     def _show_share_invite_step(self) -> None:
         """Show the share invite key step."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Title
@@ -620,7 +771,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(20, 10))
+        title_label.grid(row=0, column=0, pady=(0, 15))
         
         # Instructions
         instructions_label = ctk.CTkLabel(
@@ -631,16 +782,34 @@ class ConnectionWizard:
             text_color=("gray40", "gray60"),
             justify="center"
         )
-        instructions_label.grid(row=1, column=0, pady=(0, 15))
+        instructions_label.grid(row=1, column=0, pady=(0, 20))
         
-        # Invite key display
+        # Invite key display section with copy button
+        invite_section = ctk.CTkFrame(self.current_content, fg_color="transparent")
+        invite_section.grid(row=2, column=0, sticky="ew", pady=(15, 10))
+        invite_section.grid_columnconfigure(0, weight=1)
+        invite_section.grid_columnconfigure(1, weight=0)
+        
         invite_label = ctk.CTkLabel(
-            self.current_content,
+            invite_section,
             text="📤 Your Invite Key",
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=("gray30", "gray70")
         )
-        invite_label.grid(row=2, column=0, pady=(10, 5))
+        invite_label.grid(row=0, column=0, sticky="w")
+        
+        self.copy_invite_btn = ctk.CTkButton(
+            invite_section,
+            text="📋",
+            width=30,
+            height=30,
+            font=ctk.CTkFont(size=14),
+            corner_radius=6,
+            command=self._copy_invite_key,
+            fg_color=("gray45", "gray35"),
+            hover_color=("gray55", "gray25")
+        )
+        self.copy_invite_btn.grid(row=0, column=1, sticky="e", padx=(10, 0))
         
         self.invite_text = ctk.CTkTextbox(
             self.current_content,
@@ -649,20 +818,7 @@ class ConnectionWizard:
             corner_radius=8,
             state="disabled"
         )
-        self.invite_text.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 5))
-        
-        self.copy_invite_btn = ctk.CTkButton(
-            self.current_content,
-            text="📋 Copy to Clipboard",
-            width=160,
-            height=35,
-            font=ctk.CTkFont(size=14),
-            corner_radius=8,
-            command=self._copy_invite_key,
-            fg_color=("gray45", "gray35"),
-            hover_color=("gray55", "gray25")
-        )
-        self.copy_invite_btn.grid(row=4, column=0, pady=(0, 10))
+        self.invite_text.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 20))
         
         # Next step button
         self.next_step_btn = ctk.CTkButton(
@@ -676,12 +832,18 @@ class ConnectionWizard:
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20")
         )
-        self.next_step_btn.grid(row=5, column=0, pady=(0, 20))
+        self.next_step_btn.grid(row=5, column=0, pady=(0, 30))
+        
+        # Add tooltip for the wait for return key button
+        self._add_tooltip(self.next_step_btn, 
+                         "IMPORTANT: First share your invite key above with your peer!\n\n"
+                         "Then click this button to wait for their return key.\n"
+                         "Once you receive their return key, paste it to complete the connection.")
     
     def _show_wait_for_return_step(self) -> None:
         """Show the wait for return key step."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Title
@@ -691,7 +853,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(20, 10))
+        title_label.grid(row=0, column=0, pady=(0, 15))
         
         # Instructions
         instructions_label = ctk.CTkLabel(
@@ -702,7 +864,7 @@ class ConnectionWizard:
             text_color=("gray40", "gray60"),
             justify="center"
         )
-        instructions_label.grid(row=1, column=0, pady=(0, 15))
+        instructions_label.grid(row=1, column=0, pady=(0, 20))
         
         # Return key input
         return_label = ctk.CTkLabel(
@@ -711,15 +873,15 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=("gray30", "gray70")
         )
-        return_label.grid(row=2, column=0, pady=(10, 5))
+        return_label.grid(row=2, column=0, pady=(15, 10))
         
         self.return_entry = ctk.CTkTextbox(
             self.current_content,
             height=100,
             font=ctk.CTkFont(size=12, family="monospace"),
-            corner_radius=0
+            corner_radius=8
         )
-        self.return_entry.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 5))
+        self.return_entry.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 15))
         
         # Set up placeholder text
         self.return_entry_placeholder = "Paste the return key from your peer here..."
@@ -737,12 +899,12 @@ class ConnectionWizard:
             fg_color=("gray50", "gray30"),
             hover_color=("gray60", "gray20")
         )
-        self.connect_btn.grid(row=4, column=0, pady=(0, 20))
+        self.connect_btn.grid(row=4, column=0, pady=(0, 30))
     
     def _show_share_return_step(self) -> None:
         """Show the share return key step."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Title
@@ -752,7 +914,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(20, 10))
+        title_label.grid(row=0, column=0, pady=(0, 15))
         
         # Instructions
         instructions_label = ctk.CTkLabel(
@@ -763,16 +925,34 @@ class ConnectionWizard:
             text_color=("gray40", "gray60"),
             justify="center"
         )
-        instructions_label.grid(row=1, column=0, pady=(0, 15))
+        instructions_label.grid(row=1, column=0, pady=(0, 20))
         
-        # Return key display
+        # Return key display section with copy button
+        return_section = ctk.CTkFrame(self.current_content, fg_color="transparent")
+        return_section.grid(row=2, column=0, sticky="ew", pady=(15, 10))
+        return_section.grid_columnconfigure(0, weight=1)
+        return_section.grid_columnconfigure(1, weight=0)
+        
         return_label = ctk.CTkLabel(
-            self.current_content,
+            return_section,
             text="📤 Your Return Key",
             font=ctk.CTkFont(size=16, weight="bold"),
             text_color=("gray30", "gray70")
         )
-        return_label.grid(row=2, column=0, pady=(10, 5))
+        return_label.grid(row=0, column=0, sticky="w")
+        
+        self.copy_return_btn = ctk.CTkButton(
+            return_section,
+            text="📋",
+            width=30,
+            height=30,
+            font=ctk.CTkFont(size=14),
+            corner_radius=6,
+            command=self._copy_return_key,
+            fg_color=("gray45", "gray35"),
+            hover_color=("gray55", "gray25")
+        )
+        self.copy_return_btn.grid(row=0, column=1, sticky="e", padx=(10, 0))
         
         self.return_display_text = ctk.CTkTextbox(
             self.current_content,
@@ -781,20 +961,7 @@ class ConnectionWizard:
             corner_radius=8,
             state="disabled"
         )
-        self.return_display_text.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 5))
-        
-        self.copy_return_btn = ctk.CTkButton(
-            self.current_content,
-            text="📋 Copy to Clipboard",
-            width=160,
-            height=35,
-            font=ctk.CTkFont(size=14),
-            corner_radius=8,
-            command=self._copy_return_key,
-            fg_color=("gray45", "gray35"),
-            hover_color=("gray55", "gray25")
-        )
-        self.copy_return_btn.grid(row=4, column=0, pady=(0, 10))
+        self.return_display_text.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 20))
         
         # Waiting message
         waiting_label = ctk.CTkLabel(
@@ -803,12 +970,12 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=12),
             text_color=("gray50", "gray50")
         )
-        waiting_label.grid(row=5, column=0, pady=(0, 20))
+        waiting_label.grid(row=5, column=0, pady=(0, 30))
     
     def _show_waiting_connection_step(self) -> None:
         """Show the waiting for connection step."""
-        self.current_content = ctk.CTkFrame(self.content_frame, corner_radius=0)
-        self.current_content.grid(row=0, column=0, sticky="nsew", padx=20, pady=5)
+        self.current_content = ctk.CTkFrame(self.wizard_frame, corner_radius=0)
+        self.current_content.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 0))
         self.current_content.grid_columnconfigure(0, weight=1)
         
         # Title
@@ -818,7 +985,7 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=20, weight="bold"),
             text_color=("gray10", "gray90")
         )
-        title_label.grid(row=0, column=0, pady=(20, 10))
+        title_label.grid(row=0, column=0, pady=(0, 15))
         
         # Status message (removed - using main status bar instead)
         status_text = ctk.CTkLabel(
@@ -827,16 +994,16 @@ class ConnectionWizard:
             font=ctk.CTkFont(size=14),
             text_color=("gray40", "gray60")
         )
-        status_text.grid(row=1, column=0, pady=(0, 15))
+        status_text.grid(row=1, column=0, pady=(0, 20))
         
         # Progress bar
         self.progress_bar = ctk.CTkProgressBar(
             self.current_content,
             width=300,
             height=20,
-            corner_radius=0
+            corner_radius=8
         )
-        self.progress_bar.grid(row=2, column=0, pady=(0, 15))
+        self.progress_bar.grid(row=2, column=0, pady=(0, 20))
         self.progress_bar.set(0.5)  # Indeterminate progress
         
         # Instructions
@@ -848,7 +1015,7 @@ class ConnectionWizard:
             text_color=("gray50", "gray50"),
             justify="center"
         )
-        instructions_label.grid(row=3, column=0, pady=(0, 20))
+        instructions_label.grid(row=3, column=0, pady=(0, 30))
     
     def _update_navigation(self) -> None:
         """Update navigation buttons based on current step."""
@@ -860,7 +1027,7 @@ class ConnectionWizard:
         
         # Update next button text and visibility
         if self.current_step == WizardStep.WELCOME:
-            self.next_btn.configure(text="Start chatting")
+            self.next_btn.configure(text="Get Started")
             self.next_btn.grid()
         elif self.current_step == WizardStep.USERNAME:
             self.next_btn.configure(text="Continue →")
@@ -941,21 +1108,21 @@ class ConnectionWizard:
         if self.invite_key:
             self.parent.clipboard_clear()
             self.parent.clipboard_append(self.invite_key)
-            # Show temporary feedback
+            # Show temporary feedback by changing button text briefly
             original_text = self.copy_invite_btn.cget("text")
-            self.copy_invite_btn.configure(text="✅ Copied!")
-            self.parent.after(2000, lambda: self.copy_invite_btn.configure(text=original_text))
+            self.copy_invite_btn.configure(text="✅")
+            self.parent.after(1500, lambda: self.copy_invite_btn.configure(text=original_text))
     
     def _copy_return_key(self) -> None:
         """Copy return key to clipboard."""
         if self.return_key:
             self.parent.clipboard_clear()
             self.parent.clipboard_append(self.return_key)
-            # Show temporary feedback
+            # Show temporary feedback by changing button text briefly
             if hasattr(self, 'copy_return_btn'):
                 original_text = self.copy_return_btn.cget("text")
-                self.copy_return_btn.configure(text="✅ Copied!")
-                self.parent.after(2000, lambda: self.copy_return_btn.configure(text=original_text))
+                self.copy_return_btn.configure(text="✅")
+                self.parent.after(1500, lambda: self.copy_return_btn.configure(text=original_text))
     
     
     def hide(self) -> None:
@@ -1014,8 +1181,14 @@ class ConnectionWizard:
     
     def _setup_placeholder_text(self, textbox: ctk.CTkTextbox, placeholder: str) -> None:
         """Set up placeholder text for a CTkTextbox that disappears when user types."""
-        textbox._placeholder_text = placeholder
-        textbox._is_placeholder = True
+        # Store placeholder state in a dictionary instead of attributes
+        if not hasattr(self, '_placeholder_states'):
+            self._placeholder_states = {}
+        
+        self._placeholder_states[id(textbox)] = {
+            'placeholder_text': placeholder,
+            'is_placeholder': True
+        }
         
         textbox.insert("0.0", placeholder)
         textbox.configure(text_color=("gray50", "gray50"))
@@ -1028,17 +1201,17 @@ class ConnectionWizard:
     
     def _on_textbox_click(self, textbox: ctk.CTkTextbox) -> None:
         """Handle click on textbox with placeholder text."""
-        if getattr(textbox, '_is_placeholder', False):
+        if self._is_placeholder(textbox):
             self._clear_placeholder(textbox)
     
     def _on_textbox_keypress(self, textbox: ctk.CTkTextbox, event) -> None:
         """Handle key press on textbox with placeholder text."""
-        if getattr(textbox, '_is_placeholder', False):
+        if self._is_placeholder(textbox):
             self._clear_placeholder(textbox)
     
     def _on_textbox_paste(self, textbox: ctk.CTkTextbox, event) -> None:
         """Handle paste on textbox with placeholder text."""
-        if getattr(textbox, '_is_placeholder', False):
+        if self._is_placeholder(textbox):
             self._clear_placeholder(textbox)
     
     def _on_textbox_focus_out(self, textbox: ctk.CTkTextbox) -> None:
@@ -1047,29 +1220,137 @@ class ConnectionWizard:
         if not content:
             self._restore_placeholder(textbox)
     
+    def _is_placeholder(self, textbox: ctk.CTkTextbox) -> bool:
+        """Check if textbox is showing placeholder text."""
+        if not hasattr(self, '_placeholder_states'):
+            return False
+        state = self._placeholder_states.get(id(textbox))
+        return bool(state and state.get('is_placeholder', False))
+    
+    def _get_placeholder_text(self, textbox: ctk.CTkTextbox) -> str:
+        """Get placeholder text for textbox."""
+        if not hasattr(self, '_placeholder_states'):
+            return ""
+        state = self._placeholder_states.get(id(textbox))
+        return state.get('placeholder_text', "") if state else ""
+    
     def _clear_placeholder(self, textbox: ctk.CTkTextbox) -> None:
         """Clear placeholder text and set normal text color."""
-        if getattr(textbox, '_is_placeholder', False):
+        if self._is_placeholder(textbox):
             textbox.delete("0.0", "end")
             textbox.configure(text_color=("gray10", "gray90"))
-            textbox._is_placeholder = False
+            if hasattr(self, '_placeholder_states') and id(textbox) in self._placeholder_states:
+                self._placeholder_states[id(textbox)]['is_placeholder'] = False
     
     def _restore_placeholder(self, textbox: ctk.CTkTextbox) -> None:
         """Restore placeholder text if textbox is empty."""
         textbox.delete("0.0", "end")
-        textbox.insert("0.0", textbox._placeholder_text)
+        placeholder_text = self._get_placeholder_text(textbox)
+        textbox.insert("0.0", placeholder_text)
         textbox.configure(text_color=("gray50", "gray50"))
-        textbox._is_placeholder = True
+        if hasattr(self, '_placeholder_states') and id(textbox) in self._placeholder_states:
+            self._placeholder_states[id(textbox)]['is_placeholder'] = True
     
     def _get_textbox_content(self, textbox: ctk.CTkTextbox) -> str:
         """Get the actual content of textbox, excluding placeholder text."""
         if not textbox or not textbox.winfo_exists():
             return ""
-        if getattr(textbox, '_is_placeholder', False):
+        if self._is_placeholder(textbox):
             return ""
         try:
             return textbox.get("0.0", "end-1c").strip()
         except Exception as e:
             logger.debug(f"Could not get textbox content: {e}")
             return ""
+    
+    def _add_tooltip(self, widget, text: str) -> None:
+        """Add a tooltip to a widget that shows on hover with delay."""
+        def show_tooltip(event):
+            # Don't show tooltip if one already exists
+            if hasattr(widget, '_tooltip') and widget._tooltip:
+                return
+            
+            # Cancel any existing delay safely
+            if hasattr(widget, '_tooltip_delay') and widget._tooltip_delay:
+                try:
+                    widget.after_cancel(widget._tooltip_delay)
+                except ValueError:
+                    # Delay might have already been executed or cancelled
+                    pass
+                widget._tooltip_delay = None
+            
+            # Set a delay before showing tooltip (1.5 seconds)
+            widget._tooltip_delay = widget.after(1500, lambda: _create_tooltip(event))
+        
+        def _create_tooltip(event):
+            # Don't show tooltip if one already exists
+            if hasattr(widget, '_tooltip') and widget._tooltip:
+                return
+                
+            # Create tooltip window
+            tooltip = ctk.CTkToplevel()
+            tooltip.wm_overrideredirect(True)  # Remove window decorations
+            tooltip.wm_attributes("-topmost", True)  # Keep on top
+            
+            # Create tooltip label with better readability
+            tooltip_label = ctk.CTkLabel(
+                tooltip,
+                text=text,
+                font=ctk.CTkFont(size=13, weight="normal"),  # Larger, clearer font
+                text_color=("black", "white"),  # High contrast colors
+                fg_color=("white", "black"),  # High contrast background
+                corner_radius=8,
+                padx=12,  # More padding
+                pady=8,   # More padding
+                wraplength=350  # Allow text wrapping for long messages
+            )
+            tooltip_label.pack()
+            
+            # Position tooltip near mouse cursor but ensure it stays on screen
+            x = event.x_root + 15
+            y = event.y_root + 15
+            
+            # Get screen dimensions to keep tooltip on screen
+            screen_width = tooltip.winfo_screenwidth()
+            screen_height = tooltip.winfo_screenheight()
+            
+            # Adjust position if tooltip would go off screen
+            tooltip.update_idletasks()
+            tooltip_width = tooltip.winfo_reqwidth()
+            tooltip_height = tooltip.winfo_reqheight()
+            
+            if x + tooltip_width > screen_width:
+                x = event.x_root - tooltip_width - 15
+            if y + tooltip_height > screen_height:
+                y = event.y_root - tooltip_height - 15
+                
+            tooltip.geometry(f"+{x}+{y}")
+            
+            # Store tooltip reference for cleanup
+            widget._tooltip = tooltip
+            
+            # Hide tooltip after 10 seconds (even longer for important info)
+            tooltip.after(10000, lambda: hide_tooltip())
+        
+        def hide_tooltip():
+            # Cancel any pending tooltip delay safely
+            if hasattr(widget, '_tooltip_delay') and widget._tooltip_delay:
+                try:
+                    widget.after_cancel(widget._tooltip_delay)
+                except ValueError:
+                    # Delay might have already been executed or cancelled
+                    pass
+                widget._tooltip_delay = None
+            
+            if hasattr(widget, '_tooltip') and widget._tooltip:
+                try:
+                    widget._tooltip.destroy()
+                    widget._tooltip = None
+                except:
+                    pass
+        
+        # Bind events
+        widget.bind("<Enter>", show_tooltip)
+        widget.bind("<Leave>", lambda e: hide_tooltip())
+        widget.bind("<Button-1>", lambda e: hide_tooltip())
     

@@ -55,13 +55,14 @@ class AudioSettingsDialog:
         """Create the dialog window."""
         self.dialog = ctk.CTkToplevel(self.parent)
         self.dialog.title("🎵 Audio Settings")
-        self.dialog.geometry("500x400")
         self.dialog.resizable(False, False)
         
         # Make dialog modal - but safely
         self.dialog.transient(self.parent)
         
-        # Center the dialog
+        # Calculate centered position first, then set geometry once
+        # Use withdraw to prevent flickering during positioning
+        self.dialog.withdraw()
         self.dialog.update_idletasks()
         x = (self.dialog.winfo_screenwidth() // 2) - (500 // 2)
         y = (self.dialog.winfo_screenheight() // 2) - (400 // 2)
@@ -70,6 +71,9 @@ class AudioSettingsDialog:
         # Configure grid
         self.dialog.grid_columnconfigure(0, weight=1)
         self.dialog.grid_rowconfigure(0, weight=1)
+        
+        # Show the dialog after positioning is complete
+        self.dialog.deiconify()
         
         # Set grab after dialog is properly displayed
         self.dialog.after(100, self._safe_grab_set)
