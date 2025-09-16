@@ -21,7 +21,7 @@
     "stun_servers": [
       "stun:quadram.de"
     ],
-    "custom_stun_server": "stun:quadram.de",
-    "use_custom_stun": 1
+    "custom_stun_server": "",
+    "use_custom_stun": 0
   }
 }
