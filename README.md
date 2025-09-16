@@ -1,19 +1,37 @@
-# P2P Secure Chat
+# SuperSecureChat
 
-A peer-to-peer chat application using WebRTC for secure, end-to-end encrypted communication without servers.
+A modern peer-to-peer chat application using WebRTC for secure, end-to-end encrypted communication without servers. Features a beautiful modern GUI with dark/light themes, voice chat, file transfer, and comprehensive security features.
 
 ## Features
 
+### 🔒 Security & Privacy
 - **End-to-End Encryption**: WebRTC DTLS-SRTP encryption by default
 - **No Central Server**: Direct peer-to-peer communication after connection
 - **Manual Key Exchange**: Base64-encoded session descriptions prevent automated MITM attacks
-- **Custom Usernames**: Optional chat names for personalized communication
-- **Voice Chat**: Real-time P2P voice communication with push-to-talk and toggle modes
-- **File Transfer**: Secure file sharing with progress tracking and drag-and-drop support
-- **Input Sanitization**: Comprehensive message validation and sanitization
 - **Perfect Forward Secrecy**: Verification of PFS-enabled cipher suites
+- **Input Sanitization**: Comprehensive message validation and sanitization
 - **Security Monitoring**: Real-time security status logging
+
+### 🎨 Modern User Interface
+- **Ultra-Modern GUI**: Beautiful CustomTkinter interface with rounded corners and smooth animations
+- **Dark/Light Themes**: Instant theme switching with system preference detection
+- **Connection Wizard**: Step-by-step guided interface for creating and joining chats
+- **Responsive Design**: Adapts to different window sizes with proper scaling
+- **Visual Feedback**: Color-coded status indicators and confirmation messages
+
+### 💬 Communication Features
+- **Real-Time Messaging**: Instant encrypted text communication
+- **Custom Usernames**: Optional chat names for personalized communication
+- **Voice Chat**: Real-time P2P voice communication with simple toggle mode
+- **File Transfer**: Secure file sharing with progress tracking and file dialogs
+- **Audio Settings**: Configurable audio devices, sample rates, and buffer settings
+
+### ⚙️ Advanced Configuration
+- **Settings Management**: Persistent audio, GUI, and connection preferences
+- **STUN Server Configuration**: Custom STUN servers for better connectivity
+- **Reconnection Features**: Automatic reconnection with configurable retry logic
 - **Cross-Platform**: Works on Windows, macOS, and Linux
+- **Pre-built Releases**: Available releases for different platforms on the project page
 
 ## Security Enhancements (Latest)
 
@@ -41,9 +59,10 @@ A peer-to-peer chat application using WebRTC for secure, end-to-end encrypted co
 
 ## Requirements
 
-- Python 3.9 or higher
-- Active internet connection for STUN server (ICE negotiation)
-- NAT traversal capability (most home networks work fine)
+- **Python 3.9 or higher**
+- **Active internet connection** for STUN server (ICE negotiation)
+- **NAT traversal capability** (most home networks work fine)
+- **Audio system** (ALSA, PulseAudio, or JACK on Linux)
 
 ## Installation
 
@@ -71,36 +90,47 @@ pip install p2p-chat
 ### Running the Application
 
 ```bash
-# From source directory
+# From source directory (recommended)
 python -m p2p_chat
 
-# Or with debug logging
+# With debug logging
 python -m p2p_chat --debug
+
 
 # If installed via pip
 p2p-chat
 ```
 
+### First Launch
+
+When you first run SuperSecureChat, you'll see the modern welcome screen with the Connection Wizard:
+
+1. **Welcome Screen**: Introduction to the app's features
+2. **Username Entry**: Enter your display name (optional, defaults to "Anonymous")
+3. **Connection Type**: Choose between creating or joining a chat
+4. **Guided Process**: Step-by-step instructions for your chosen option
+
 ### Creating a Chat
 
 1. Launch the application
-2. **Optional**: Enter your preferred chat name in the "Your Chat Name" field (leave empty for "Anonymous")
-3. Click **"Create Chat"**
-4. Copy the generated **invite key**
-5. Share the invite key with the other person (via email, messaging, etc.)
-6. Paste their **return key** when they send it back
-7. Click **"Connect"** to establish the connection
+2. **Welcome Screen**: Click "Next" to proceed
+3. **Username**: Enter your display name (optional, defaults to "Anonymous")
+4. **Connection Type**: Select "Create Chat"
+5. **Create Chat**: Click "Create Chat" to generate an invite key
+6. **Share Invite Key**: Copy and share the generated invite key with the other person
+7. **Wait for Return Key**: Paste their return key when they send it back
+8. **Connect**: Click "Connect" to establish the connection
 
 ### Joining a Chat
 
 1. Launch the application
-2. **Optional**: Enter your preferred chat name in the "Your Chat Name" field (leave empty for "Anonymous")
-3. Click **"Join Chat"**
-4. Paste the **invite key** you received
-5. Click **"Join Chat"**
-6. Copy the generated **return key**
-7. Send the return key back to the chat creator
-8. Wait for connection establishment
+2. **Welcome Screen**: Click "Next" to proceed
+3. **Username**: Enter your display name (optional, defaults to "Anonymous")
+4. **Connection Type**: Select "Join Chat"
+5. **Enter Invite Key**: Paste the invite key you received from the chat creator
+6. **Join Chat**: Click "Join Chat" to generate your return key
+7. **Share Return Key**: Copy and send your return key back to the chat creator
+8. **Wait for Connection**: Wait for the creator to complete the handshake
 
 ### Chatting
 
@@ -112,34 +142,47 @@ Once connected:
 
 ### Voice Chat
 
-The application now includes real-time voice communication capabilities:
-
-#### Enabling Voice Chat
-1. **After connecting** to a peer, click **"🎤 Enable Voice"** button
-2. Grant microphone permissions when prompted by your browser/system
-3. The voice status will show "Voice Chat: Enabled"
+The application includes real-time voice communication capabilities:
 
 #### Using Voice Chat
-- **Push-to-Talk Mode** (Default):
-  - Hold down **"🗣️ Hold to Talk"** button while speaking
-  - Or hold **Spacebar** (when not typing in text field)
-  - Release to stop transmitting
+1. **After connecting** to a peer, click **"🎤 Start Voice Chat"** button
+2. Grant microphone permissions when prompted by your system
+3. The button will change to **"🔇 Stop Voice Chat"** and voice transmission will begin immediately
+4. Click **"🔇 Stop Voice Chat"** to stop voice transmission
 
-- **Toggle Mode**:
-  - Click **"🔄 Toggle Mode"** to start/stop continuous transmission
-  - Useful for longer conversations without holding buttons
-
-#### Voice Chat Controls
-- **🎤 Enable/Disable Voice**: Turn voice chat on/off
-- **🗣️ Hold to Talk**: Push-to-talk button (mouse or spacebar)
-- **🔄 Toggle Mode**: Switch between push-to-talk and continuous modes
-- **Voice Status**: Shows current voice chat state (Disabled/Enabled/Transmitting/Listening)
+#### Voice Chat Features
+- **Simple Toggle**: One-click start/stop voice transmission
+- **Real-Time Audio**: Direct peer-to-peer voice communication
+- **Audio Settings**: Configurable input/output devices and sample rates
+- **Encrypted Audio**: Voice data encrypted with WebRTC DTLS-SRTP
 
 #### Audio Quality
 - **Sample Rate**: 48kHz for high-quality audio
 - **Low Latency**: Optimized for real-time communication
-- **Automatic Gain**: Adjusts audio levels automatically
-- **Echo Cancellation**: Built-in browser audio processing
+- **Cross-Platform**: Works with ALSA, PulseAudio, and JACK on Linux
+
+### File Transfer
+
+The application supports secure file sharing between peers:
+
+#### Sending Files
+1. **After connecting** to a peer, click the **"📁 Send File"** button
+2. Select the file you want to send using the file dialog
+3. The recipient will receive a file transfer offer dialog
+4. Monitor transfer progress in the progress dialog
+
+#### Receiving Files
+1. When a file transfer offer is received, a dialog will appear
+2. Choose to **Accept** or **Reject** the file transfer
+3. If accepting, choose where to save the file
+4. Monitor transfer progress in the progress dialog
+
+#### File Transfer Features
+- **Secure Transfer**: Files are encrypted during transmission
+- **Progress Tracking**: Real-time progress indicators
+- **File Validation**: Checksums ensure file integrity
+- **User Control**: Accept/reject file transfers
+- **Modern Dialogs**: Beautiful file selection and progress dialogs
 
 ## How It Works
 
@@ -154,38 +197,49 @@ The application now includes real-time voice communication capabilities:
 
 ```
 p2p_chat/
-├── p2p_chat/           # Main package
-│   ├── __init__.py     # Package initialization
-│   ├── main.py         # Application orchestration & entry point
-│   ├── gui.py          # Tkinter GUI components
-│   ├── rtc_peer.py     # WebRTC peer connection wrapper
-│   ├── signaling.py    # Base64 encoding/decoding helpers
-│   └── utils.py        # Utility functions
-├── requirements.txt    # Dependencies
-├── pyproject.toml      # Project configuration
-└── README.md          # This file
+├── p2p_chat/                    # Main package
+│   ├── __init__.py              # Package initialization
+│   ├── __main__.py              # Module entry point
+│   ├── main.py                  # Application orchestration & entry point
+│   ├── modern_gui.py           # Modern GUI theme setup
+│   ├── modern_chat_window.py    # Ultra-modern CustomTkinter GUI
+│   ├── chat_window.py           # Legacy Tkinter GUI (fallback)
+│   ├── connection_wizard.py     # Step-by-step connection wizard
+│   ├── rtc_peer.py              # WebRTC peer connection wrapper
+│   ├── file_transfer_mixin.py   # File transfer functionality
+│   ├── voice_chat_mixin.py      # Voice chat functionality
+│   ├── settings_manager.py     # Settings persistence
+│   ├── audio_settings_dialog.py # Audio device configuration
+│   ├── connection_settings_dialog.py # STUN server configuration
+│   ├── file_transfer_dialog.py  # File transfer UI
+│   ├── file_progress_dialog.py  # Transfer progress display
+│   ├── custom_file_dialog.py    # Enhanced file dialogs
+│   ├── security.py              # Input validation & sanitization
+│   ├── signaling.py             # Base64 encoding/decoding helpers
+│   └── utils.py                 # Utility functions
+├── requirements.txt              # Dependencies
+├── requirements-build.txt        # Build dependencies
+├── pyproject.toml               # Project configuration
+├── settings.json                # User settings
+└── README.md                    # This file
 ```
 
-## Building Standalone Executables
+## Pre-built Releases
 
-### Using PyInstaller
+SuperSecureChat is available as pre-built releases that don't require Python installation:
 
-```bash
-# Install PyInstaller
-pip install pyinstaller
+### Available Releases
 
-# Build executable
-pyinstaller --onefile --windowed --name "P2P Chat" -p p2p_chat p2p_chat/main.py
+Check the project page for the latest releases:
+- **Image Release**: Portable image format for easy distribution
+- **Windows Release**: Native Windows executable
 
-# The executable will be in dist/
-```
+**Features:**
+- Single file with all dependencies included
+- No Python installation required
+- Self-contained settings and temporary files
+- Cross-platform audio support
 
-### Using cx_Freeze
-
-```bash
-pip install cx_freeze
-python setup.py build
-```
 
 ## Security Notes
 
@@ -259,6 +313,22 @@ The application handles security violations gracefully:
 - **"Connection failed"**: Usually NAT/firewall issue, try again or check network settings
 - **"Invalid session description"**: Ensure you copied the complete key without truncation
 
+## Dependencies
+
+### Core Dependencies
+
+- **aiortc>=1.13.0**: WebRTC implementation with latest security patches
+- **pyee>=9.0**: Event handling system
+- **sounddevice>=0.4.6**: Cross-platform audio I/O
+- **numpy>=1.21.0**: Numerical computing for audio processing
+- **customtkinter>=5.2.0**: Modern GUI framework
+- **av>=10.0.0**: Audio/video processing
+
+### Build Dependencies
+
+- **pyinstaller**: For creating standalone executables
+- **linuxdeploy**: For creating AppImage packages
+
 ## Development
 
 ### Running Tests
@@ -296,8 +366,34 @@ mypy p2p_chat/
 
 MIT License - see LICENSE file for details.
 
+## Modern GUI Features
+
+SuperSecureChat features a completely modernized user interface:
+
+### 🎨 Visual Design
+- **CustomTkinter Framework**: Modern, beautiful interface with rounded corners
+- **Dark/Light Themes**: Instant theme switching with system preference detection
+- **Smooth Animations**: Hover effects and state transitions
+- **Professional Typography**: Custom fonts with proper weight and sizing
+- **Color-Coded Elements**: Different colors for different actions and states
+
+### 🧭 User Experience
+- **Connection Wizard**: Step-by-step guided interface for creating and joining chats
+- **Progress Indicators**: Visual step progress with color-coded status
+- **Auto-copy Functionality**: Keys are automatically copied to clipboard
+- **Visual Feedback**: Copy confirmations, loading states, and status indicators
+- **Responsive Layout**: Adapts to different window sizes with proper scaling
+
+### ⚙️ Settings & Configuration
+- **Audio Settings Dialog**: Configure input/output devices, sample rates, and buffer settings
+- **Connection Settings Dialog**: Custom STUN servers and connection parameters
+- **Persistent Settings**: All preferences saved automatically
+- **Settings Import/Export**: Backup and restore configuration
+
 ## Acknowledgments
 
 - [aiortc](https://github.com/aiortc/aiortc) for WebRTC implementation
 - [pyee](https://github.com/jfhbrook/pyee) for event handling
+- [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) for the modern GUI framework
+- [sounddevice](https://github.com/spatialaudio/python-sounddevice) for cross-platform audio
 - Google STUN servers for NAT traversal 
